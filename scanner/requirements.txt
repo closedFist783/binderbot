@@ -1,0 +1,9 @@
+flask>=3.0
+flask-cors>=4.0
+Pillow>=10.0
+requests>=2.31
+imagehash>=4.3
+pytesseract>=0.3.10
+# Pi-specific (uncomment on Pi hardware):
+# picamera2
+# RPi.GPIO
