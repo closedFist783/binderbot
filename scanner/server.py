@@ -123,6 +123,15 @@ def locate_card(name):
         results.append({**c, 'bin': bin_num, 'position_in_bin': pos_in_bin})
     return jsonify(results)
 
+@app.route('/api/preview')
+def preview():
+    """Return a live camera snapshot as base64 JPEG — for debugging framing/focus."""
+    img = capture()
+    buf = io.BytesIO()
+    img.save(buf, 'JPEG', quality=75)
+    data = base64.b64encode(buf.getvalue()).decode()
+    return jsonify({'image': f'data:image/jpeg;base64,{data}'})
+
 @app.route('/api/scan-image/<int:physical_id>')
 def scan_image(physical_id):
     """Return base64 scan image for a card."""
