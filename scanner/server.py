@@ -133,6 +133,18 @@ def preview():
     buf.seek(0)
     return Response(buf.read(), mimetype='image/jpeg')
 
+@app.route('/api/preview-ocr')
+def preview_ocr():
+    """Return the preprocessed OCR image — shows exactly what Tesseract sees."""
+    from flask import Response
+    from identify import preprocess_for_ocr
+    img = capture()
+    processed = preprocess_for_ocr(img)
+    buf = io.BytesIO()
+    processed.save(buf, 'JPEG', quality=90)
+    buf.seek(0)
+    return Response(buf.read(), mimetype='image/jpeg')
+
 @app.route('/api/scan-image/<int:physical_id>')
 def scan_image(physical_id):
     """Return scan image as raw JPEG."""
