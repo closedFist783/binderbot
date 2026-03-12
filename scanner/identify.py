@@ -109,19 +109,51 @@ def ocr_card_number(img: Image.Image) -> tuple[str | None, int | None]:
 
 
 def ocr_card_name(img: Image.Image) -> str | None:
-    """Try to read the card name from the top portion of the image."""
+    """
+    Read the card name from the top of the card.
+    Card names are large bold text — try multiple thresholds and crop heights.
+    """
     if not TESSERACT_OK:
         return None
     w, h = img.size
-    top = img.crop((0, 0, w, int(h * 0.15)))
-    proc = _preprocess(top)
-    raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 7').strip()
-    # Filter obvious garbage (too short, all symbols)
-    if len(raw) >= 3 and re.search(r'[A-Za-z]', raw):
-        return raw
+    # Try a few crop heights — name bar height varies by card type
+    for frac in (0.10, 0.14, 0.18):
+        strip = img.crop((0, 0, w, int(h * frac)))
+        for thresh in (120, 100, 140):
+            proc = _preprocess(strip, threshold=thresh)
+            raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 7').strip()
+            raw = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', raw).strip()
+            if len(raw) >= 3 and re.search(r'[A-Za-z]{3}', raw):
+                print(f'[identify] OCR name (frac={frac} thresh={thresh}): {raw!r}')
+                return raw
     return None
 
 # ── Local DB lookup ───────────────────────────────────────────────────────────
+
+def _db_search_by_name(name: str) -> list[dict]:
+    """Fuzzy search cards.db by card name."""
+    if not os.path.exists(CARDS_DB):
+        return []
+    try:
+        conn = sqlite3.connect(CARDS_DB)
+        conn.row_factory = sqlite3.Row
+        # Exact match first
+        rows = conn.execute(
+            'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 10',
+            (name.lower(),)
+        ).fetchall()
+        if not rows:
+            # Contains match
+            rows = conn.execute(
+                'SELECT * FROM cards WHERE LOWER(name) LIKE ? LIMIT 20',
+                (f'%{name.lower()}%',)
+            ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f'[identify] DB name search error: {e}')
+        return []
+
 
 def _db_search(number: str, set_total: int | None = None) -> list[dict]:
     """Query cards.db by card number (and optionally set total)."""
@@ -194,32 +226,36 @@ def identify_card(img: Image.Image) -> dict:
         'identified_by': 'failed', 'confidence': 0.0, 'needs_review': 1,
     }
 
-    # Step 1: OCR card number
+    # Step 1: OCR card number and name in parallel
     number, set_total = ocr_card_number(img)
-    print(f'[identify] OCR result: number={number!r} set_total={set_total!r}')
+    ocr_name = ocr_card_name(img)
+    print(f'[identify] OCR number={number!r} set_total={set_total!r} name={ocr_name!r}')
 
-    if not number:
-        result['identified_by'] = 'failed'
-        return result
+    result['card_number'] = f'{number}/{set_total}' if number and set_total else (number or None)
 
-    result['card_number'] = f'{number}/{set_total}' if set_total else number
+    # Step 2: Name-first lookup — most reliable when name OCR works
+    candidates = []
+    if ocr_name:
+        candidates = _db_search_by_name(ocr_name)
+        print(f'[identify] DB by name: {len(candidates)} candidates')
+        # If we also have a number, filter name results by set_total
+        if candidates and set_total:
+            filtered = [c for c in candidates if c.get('set_total') == set_total]
+            if filtered:
+                candidates = filtered
+                print(f'[identify] Filtered by set_total={set_total}: {len(candidates)}')
 
-    # Step 2: DB lookup
-    candidates = _db_search(number, set_total)
-    print(f'[identify] DB candidates: {len(candidates)}')
-
-    if not candidates and set_total:
-        # Retry without set_total constraint
-        candidates = _db_search(number)
-        print(f'[identify] DB retry (no set filter): {len(candidates)} candidates')
+    # Step 3: Fallback to number lookup
+    if not candidates and number:
+        candidates = _db_search(number, set_total)
+        print(f'[identify] DB by number: {len(candidates)} candidates')
+        if not candidates:
+            candidates = _db_search(number)
+            print(f'[identify] DB by number (no set filter): {len(candidates)} candidates')
 
     if not candidates:
         result['identified_by'] = 'failed'
         return result
-
-    # Step 3: OCR name for disambiguation
-    ocr_name = ocr_card_name(img)
-    print(f'[identify] OCR name: {ocr_name!r}')
 
     # Step 4: Pick best candidate
     card, confidence = _pick_best(candidates, ocr_name)
