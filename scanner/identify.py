@@ -128,6 +128,7 @@ def _api_get(path, params=None, retries=2):
     for attempt in range(retries + 1):
         try:
             ctx = ssl.create_default_context()
+            ctx.set_alpn_protocols(['http/1.1'])  # prevent H2 negotiation stall
             conn = http.client.HTTPSConnection('api.pokemontcg.io', context=ctx, timeout=15)
             conn.request('GET', url_path, headers=hdrs)
             resp = conn.getresponse()
