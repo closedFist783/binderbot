@@ -26,32 +26,43 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # ── OCR helpers ──────────────────────────────────────────────────────────────
 
 def preprocess_for_ocr(img: Image.Image) -> Image.Image:
-    """Boost contrast and sharpen the full image for OCR."""
+    """
+    Prepare image for OCR: autocontrast, sharpen, binarize.
+    Avoids over-boosting contrast which blows out light card backgrounds.
+    """
+    import PIL.ImageOps
     img = img.convert('L')
-    img = ImageEnhance.Contrast(img).enhance(2.5)
-    img = img.filter(ImageFilter.SHARPEN)
+    # Autocontrast: stretch histogram without crushing highlights
+    img = PIL.ImageOps.autocontrast(img, cutoff=2)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
+    # Binary threshold — text is dark on light background
+    img = img.point(lambda x: 0 if x < 160 else 255)
+    # Scale up for Tesseract
+    img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
     return img
 
 def ocr_card_number(img: Image.Image) -> str | None:
     """
-    Search the full image for a card number pattern like '181/198' or 'SV181/SV198'.
-    Card number can be anywhere — we search rather than crop to a fixed region.
+    Search for a card number (e.g. 181/198) in the bottom 40% of the image.
+    Uses LSTM engine and multiple PSM modes.
     """
     if not TESSERACT_OK:
         return None
-    processed = preprocess_for_ocr(img)
-    # PSM 6 = assume uniform block of text — best for scanning full image
-    raw = pytesseract.image_to_string(processed, config='--psm 6')
-    print(f'[identify] OCR full raw: {raw!r}')
-    # Find all slash-number patterns in the text
-    matches = re.findall(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw)
-    print(f'[identify] OCR matches: {matches}')
-    if matches:
-        # Take the last match — card number is near the bottom
-        m = matches[-1]
-        num = f'{m[1]}/{m[2]}'
-        print(f'[identify] OCR result: {num!r}')
-        return num
+
+    # Crop to bottom 40% where card number lives
+    w, h = img.size
+    bottom = img.crop((0, int(h * 0.60), w, h))
+    processed = preprocess_for_ocr(bottom)
+
+    for psm in (6, 11, 7):
+        raw = pytesseract.image_to_string(processed, config=f'--oem 1 --psm {psm}')
+        print(f'[identify] OCR psm={psm} raw: {raw!r}')
+        matches = re.findall(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw)
+        if matches:
+            m = matches[-1]
+            num = f'{m[1]}/{m[2]}'
+            print(f'[identify] OCR matched: {num!r}')
+            return num
     return None
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────

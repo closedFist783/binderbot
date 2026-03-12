@@ -36,9 +36,9 @@ export default function ScanTab({ status }) {
 
       {lastCard && (
         <div className="last-scan-card">
-          {/* Scan image from camera */}
+          {/* Scan image from camera — URL is stable per physical_id, no polling */}
           <img
-            src={`${import.meta.env.VITE_API_URL}/api/scan-image/${lastCard.physical_id}?t=${Date.now()}`}
+            src={`${import.meta.env.VITE_API_URL}/api/scan-image/${lastCard.physical_id}`}
             alt="scan"
             style={{ width: 80, height: 112, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: 'var(--surface2)' }}
             onError={e => { e.target.style.display = 'none' }}
