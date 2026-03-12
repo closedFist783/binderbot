@@ -67,11 +67,20 @@ def ocr_card_number(img: Image.Image) -> str | None:
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
 
-def _api_get(path, params=None):
+def _api_get(path, params=None, retries=2):
     headers = {'X-Api-Key': API_KEY} if API_KEY else {}
-    r = requests.get(f'{POKEMON_TCG_API}/{path}', params=params, headers=headers, timeout=10)
-    r.raise_for_status()
-    return r.json()
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(f'{POKEMON_TCG_API}/{path}', params=params, headers=headers, timeout=20)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                print(f'[identify] API attempt {attempt+1} failed, retrying... ({e})')
+                time.sleep(1)
+    raise last_err
 
 def search_by_number(card_number: str) -> list[dict]:
     """Query API for cards matching this number. Returns list of candidates."""
