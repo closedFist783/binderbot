@@ -163,9 +163,11 @@ def _db_conn():
 
 
 def _to_card(r) -> dict:
+    keys = r.keys()
     return {
         'id': r['id'], 'name': r['name'], 'number': r['number'],
         'set_id': r['set_id'], 'set_name': r['set_name'], 'set_total': r['set_total'],
+        'set_printed_total': r['set_printed_total'] if 'set_printed_total' in keys else None,
         'rarity': r['rarity'], 'supertype': r['supertype'],
         'image_small': r['image_small'], 'price_market': r['price_market'],
     }
@@ -218,19 +220,18 @@ def db_search_number(number: str, set_total: int | None = None) -> list[dict]:
         return []
     try:
         conn = _db_conn()
-        # Strip leading zeros and letters from stored number for comparison
+        num_expr = 'CAST(LTRIM(number,"0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT)'
         if set_total:
+            # Match against both set_total (API total) and set_printed_total (printed on card)
             rows = conn.execute(
-                '''SELECT * FROM cards
-                   WHERE CAST(LTRIM(number,"0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
-                   AND set_total = ? LIMIT 20''',
-                (number, set_total)
+                f'''SELECT * FROM cards
+                    WHERE {num_expr} = ?
+                    AND (set_total = ? OR set_printed_total = ?) LIMIT 20''',
+                (number, set_total, set_total)
             ).fetchall()
         else:
             rows = conn.execute(
-                '''SELECT * FROM cards
-                   WHERE CAST(LTRIM(number,"0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
-                   LIMIT 20''',
+                f'SELECT * FROM cards WHERE {num_expr} = ? LIMIT 20',
                 (number,)
             ).fetchall()
         conn.close()

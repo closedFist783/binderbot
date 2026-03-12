@@ -36,17 +36,18 @@ def download(url: str) -> bytes:
 def init_db(conn: sqlite3.Connection):
     conn.execute('''
         CREATE TABLE IF NOT EXISTS cards (
-            id          TEXT PRIMARY KEY,
-            name        TEXT,
-            number      TEXT,
-            set_id      TEXT,
-            set_name    TEXT,
-            set_total   INTEGER,
-            rarity      TEXT,
-            supertype   TEXT,
-            image_small TEXT,
-            image_large TEXT,
-            price_market REAL
+            id              TEXT PRIMARY KEY,
+            name            TEXT,
+            number          TEXT,
+            set_id          TEXT,
+            set_name        TEXT,
+            set_total       INTEGER,
+            set_printed_total INTEGER,
+            rarity          TEXT,
+            supertype       TEXT,
+            image_small     TEXT,
+            image_large     TEXT,
+            price_market    REAL
         )
     ''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_number   ON cards(number)')
@@ -65,13 +66,15 @@ def import_set(conn: sqlite3.Connection, cards: list) -> int:
             if p:
                 price = p
                 break
+        s = c.get('set', {})
         rows.append((
             c['id'],
             c.get('name'),
             c.get('number'),
-            c.get('set', {}).get('id'),
-            c.get('set', {}).get('name'),
-            c.get('set', {}).get('total'),
+            s.get('id'),
+            s.get('name'),
+            s.get('total'),
+            s.get('printedTotal') or s.get('total'),
             c.get('rarity'),
             c.get('supertype'),
             c.get('images', {}).get('small'),
@@ -80,9 +83,9 @@ def import_set(conn: sqlite3.Connection, cards: list) -> int:
         ))
     conn.executemany('''
         INSERT OR REPLACE INTO cards
-        (id, name, number, set_id, set_name, set_total, rarity, supertype,
-         image_small, image_large, price_market)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, number, set_id, set_name, set_total, set_printed_total,
+         rarity, supertype, image_small, image_large, price_market)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', rows)
     conn.commit()
     return len(rows)
