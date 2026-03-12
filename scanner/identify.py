@@ -149,19 +149,67 @@ def _to_card(r) -> dict:
     }
 
 
+def _name_variants(name: str) -> list[str]:
+    """Generate OCR-error variants of a name to try in DB searches."""
+    variants = [name]
+    # Common OCR letter confusions in words: i↔l, rn↔m, 0↔O, etc.
+    subs = [('i', 'l'), ('l', 'i'), ('rn', 'm'), ('m', 'rn'),
+            ('ii', 'll'), ('ll', 'ii'), ('1', 'l'), ('0', 'o')]
+    for a, b in subs:
+        v = name.replace(a, b)
+        if v != name and v not in variants:
+            variants.append(v)
+    return variants
+
+
 def db_search_name(name: str) -> list[dict]:
     if not os.path.exists(CARDS_DB):
         return []
     try:
         conn = _db_conn()
+        rows = []
+
+        # 1. Exact match
         rows = conn.execute(
             'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 20', (name.lower(),)
         ).fetchall()
+
+        # 2. Try OCR variants (e.g. "Nest Bail" → "Nest Ball")
+        if not rows:
+            for variant in _name_variants(name):
+                if variant == name:
+                    continue
+                rows = conn.execute(
+                    'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 20',
+                    (variant.lower(),)
+                ).fetchall()
+                if rows:
+                    print(f'[identify] Name variant match: "{name}" → "{variant}"')
+                    break
+
+        # 3. Full phrase LIKE
         if not rows:
             rows = conn.execute(
                 'SELECT * FROM cards WHERE LOWER(name) LIKE ? LIMIT 20',
                 (f'%{name.lower()}%',)
             ).fetchall()
+
+        # 4. Word-by-word: search by each significant word individually
+        if not rows:
+            words = [w for w in name.split() if len(w) >= 4]
+            for word in words:
+                for variant in _name_variants(word):
+                    r = conn.execute(
+                        'SELECT * FROM cards WHERE LOWER(name) LIKE ? LIMIT 20',
+                        (f'%{variant.lower()}%',)
+                    ).fetchall()
+                    if r:
+                        rows = r
+                        print(f'[identify] Word match: "{word}" → "{variant}"')
+                        break
+                if rows:
+                    break
+
         conn.close()
         result = [_to_card(r) for r in rows]
         print(f'[identify] DB name search "{name}": {len(result)} results')
