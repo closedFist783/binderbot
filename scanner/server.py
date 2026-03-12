@@ -25,6 +25,11 @@ WEB_BUILD = os.path.join(os.path.dirname(__file__), '..', 'web', 'dist')
 app = Flask(__name__, static_folder=WEB_BUILD if os.path.exists(WEB_BUILD) else None)
 CORS(app)
 
+@app.after_request
+def add_private_network_header(response):
+    response.headers['Access-Control-Allow-Private-Network'] = 'true'
+    return response
+
 # ── Scanner state ─────────────────────────────────────────────────────────────
 
 _scan_lock = threading.Lock()
