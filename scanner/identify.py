@@ -113,19 +113,26 @@ def ocr_card_number(img: Image.Image) -> str | None:
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
 
-import socket
-# Force IPv4 — Pi resolves to IPv6 but has no IPv6 route
-_orig_getaddrinfo = socket.getaddrinfo
-def _ipv4_getaddrinfo(host, port, family=0, *args, **kwargs):
-    return _orig_getaddrinfo(host, port, socket.AF_INET, *args, **kwargs)
-socket.getaddrinfo = _ipv4_getaddrinfo
+import ssl
+from requests.adapters import HTTPAdapter
+
+class _HTTP1Adapter(HTTPAdapter):
+    """Force HTTP/1.1 — prevents H2 ALPN negotiation stalling on the Pi."""
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.create_default_context()
+        ctx.set_alpn_protocols(['http/1.1'])
+        kwargs['ssl_context'] = ctx
+        super().init_poolmanager(*args, **kwargs)
+
+_session = requests.Session()
+_session.mount('https://', _HTTP1Adapter())
 
 def _api_get(path, params=None, retries=2):
     headers = {'X-Api-Key': API_KEY} if API_KEY else {}
     last_err = None
     for attempt in range(retries + 1):
         try:
-            r = requests.get(f'{POKEMON_TCG_API}/{path}', params=params, headers=headers, timeout=20)
+            r = _session.get(f'{POKEMON_TCG_API}/{path}', params=params, headers=headers, timeout=15)
             r.raise_for_status()
             return r.json()
         except Exception as e:
