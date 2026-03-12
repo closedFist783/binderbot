@@ -93,9 +93,12 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
         m = _NUMBER_RE.search(raw)
         if m and not number:
             try:
-                n = _fix_digits(m.group(1)).lstrip('0') or '0'
-                t = int(_fix_digits(m.group(2)))
-                number, set_total = n, t
+                raw_n = _fix_digits(m.group(1))
+                raw_t = _fix_digits(m.group(2))
+                t = int(raw_t)
+                number = raw_n.lstrip('0') or '0'
+                number_display = f'{raw_n}/{raw_t}'  # preserve original padding
+                set_total = t
                 best_raw = raw
                 print(f'[identify] OCR number={number}/{set_total} (thresh={thresh})')
             except ValueError:
@@ -152,7 +155,7 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
         except Exception as e:
             print(f'[identify] OCR zoom error: {e}')
 
-    return number, set_total, name
+    return number, set_total, name, locals().get('number_display')
 
 # ── DB lookup ─────────────────────────────────────────────────────────────────
 
@@ -291,8 +294,8 @@ def identify_card(img: Image.Image) -> dict:
         'identified_by': 'failed', 'confidence': 0.0, 'needs_review': 1,
     }
 
-    number, set_total, ocr_name = ocr_scan(img)
-    result['card_number'] = f'{number}/{set_total}' if number and set_total else number
+    number, set_total, ocr_name, number_display = ocr_scan(img)
+    result['card_number'] = number_display or (f'{number}/{set_total}' if number and set_total else number)
 
     # Get candidates from both signals independently
     name_candidates = db_search_name(ocr_name) if ocr_name else []
