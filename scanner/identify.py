@@ -23,6 +23,8 @@ API_KEY = os.environ.get('POKEMON_TCG_API_KEY', '')  # optional — raises rate 
 CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+CARDS_DB = os.path.join(os.path.dirname(__file__), '..', 'cards.db')
+
 # ── OCR helpers ──────────────────────────────────────────────────────────────
 
 def preprocess_for_ocr(img: Image.Image) -> Image.Image:
@@ -142,11 +144,50 @@ def _api_get(path, params=None, retries=2):
                 time.sleep(1)
     raise last_err
 
-def search_by_number(card_number: str) -> list[dict]:
-    """Query API for cards matching this number. Returns list of candidates."""
-    # card_number e.g. '045/189' → number part is '45'
+def _local_search(card_number: str) -> list[dict]:
+    """Search the local cards.db for this card number."""
+    if not os.path.exists(CARDS_DB):
+        return []
+    import sqlite3 as _sqlite3
     num_part = card_number.split('/')[0].lstrip('0') or '0'
-    # Remove letter prefix for query (SV045 → 045 → 45)
+    num_clean = re.sub(r'^[A-Za-z]+', '', num_part).lstrip('0') or '0'
+    try:
+        conn = _sqlite3.connect(CARDS_DB)
+        conn.row_factory = _sqlite3.Row
+        rows = conn.execute(
+            'SELECT * FROM cards WHERE CAST(LTRIM(number, "0") AS TEXT) = ? LIMIT 30',
+            (num_clean,)
+        ).fetchall()
+        conn.close()
+        # Convert to API-compatible dict format
+        result = []
+        for r in rows:
+            result.append({
+                'id': r['id'],
+                'name': r['name'],
+                'number': r['number'],
+                'set': {'id': r['set_id'], 'name': r['set_name'], 'total': r['set_total']},
+                'rarity': r['rarity'],
+                'supertype': r['supertype'],
+                'images': {'small': r['image_small'], 'large': r['image_large']},
+                'tcgplayer': {'prices': {'normal': {'market': r['price_market']}}} if r['price_market'] else {},
+            })
+        print(f'[identify] Local DB: {len(result)} candidates for number {num_clean!r}')
+        return result
+    except Exception as e:
+        print(f'[identify] Local DB error: {e}')
+        return []
+
+
+def search_by_number(card_number: str) -> list[dict]:
+    """Search local DB first, fall back to API."""
+    # Try local DB first
+    candidates = _local_search(card_number)
+    if candidates:
+        return candidates
+
+    # Fall back to API
+    num_part = card_number.split('/')[0].lstrip('0') or '0'
     num_clean = re.sub(r'^[A-Z]+', '', num_part).lstrip('0') or '0'
     try:
         data = _api_get('cards', {'q': f'number:{num_clean}', 'pageSize': 20})
