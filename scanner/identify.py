@@ -73,13 +73,20 @@ def ocr_card_number(img: Image.Image) -> str | None:
     if not TESSERACT_OK:
         return None
 
-    # Pass 1: find candidate number in bottom 40%
+    # Pass 1: try bottom 50% with PSM 6, then PSM 11 if nothing found
     w, h = img.size
-    bottom = img.crop((0, int(h * 0.60), w, h))
+    bottom = img.crop((0, int(h * 0.50), w, h))
     processed = preprocess_for_ocr(bottom)
 
     raw = pytesseract.image_to_string(processed, config='--oem 1 --psm 6')
     print(f'[identify] OCR pass1 raw: {raw!r}')
+
+    # If PSM 6 found nothing, try PSM 11 (sparse — finds any text anywhere)
+    if not re.search(r'\d{2,4}\s*/\s*\d{2,4}', raw):
+        raw2 = pytesseract.image_to_string(processed, config='--oem 1 --psm 11')
+        print(f'[identify] OCR pass1 psm11 raw: {raw2!r}')
+        if re.search(r'\d{2,4}\s*/\s*\d{2,4}', raw2):
+            raw = raw2
 
     # Pass 2: find the slash-number substring, re-OCR it with digits-only whitelist
     # Extract bounding boxes for digit clusters near a slash
