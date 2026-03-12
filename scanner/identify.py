@@ -267,8 +267,22 @@ def identify_card(img: Image.Image) -> dict:
         result['card_number'] = card_number
         candidates = search_by_number(card_number)
 
-    # Step 2: Pick best match (hash comparison if multiple)
-    card, confidence = best_card_match(candidates, img)
+    # Step 1b: narrow candidates by set total (the second number, e.g. 198 in 181/198)
+    if card_number and '/' in card_number:
+        try:
+            set_total = int(card_number.split('/')[1])
+            filtered = [c for c in candidates if c.get('set', {}).get('total') == set_total]
+            if filtered:
+                print(f'[identify] Filtered to {len(filtered)} candidates by set total={set_total}')
+                candidates = filtered
+        except (ValueError, IndexError):
+            pass
+
+    # Step 2: Pick best match (hash comparison if multiple, direct if only one)
+    if len(candidates) == 1:
+        card, confidence = candidates[0], 0.88
+    else:
+        card, confidence = best_card_match(candidates, img)
 
     if card and confidence >= 0.5:
         prices = card.get('tcgplayer', {}).get('prices', {})
