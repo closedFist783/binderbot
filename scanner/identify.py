@@ -1,12 +1,18 @@
 """
-Card identification — OCR the card number + name, look up in local cards.db.
+Card identification — OCR the full card image, look up in local cards.db.
 No network calls. Run scripts/build_card_db.py once to populate the database.
+
+Confidence levels:
+  >= 0.88  — name + number match, single candidate         → auto-accepted
+  >= 0.75  — name match with multiple candidates, best pick → auto-accepted
+  >= 0.50  — partial match, low certainty                   → flagged for review
+  <  0.50  — failed / wild guess                            → flagged for review
 """
 import os
 import re
 import sqlite3
 
-from PIL import Image, ImageFilter, ImageEnhance
+from PIL import Image, ImageFilter
 import PIL.ImageOps
 
 try:
@@ -18,7 +24,7 @@ except ImportError:
 
 CARDS_DB = os.path.join(os.path.dirname(__file__), '..', 'cards.db')
 
-# ── Image preprocessing ───────────────────────────────────────────────────────
+# ── Preprocessing ─────────────────────────────────────────────────────────────
 
 def _preprocess(img: Image.Image, threshold: int = 140) -> Image.Image:
     """Greyscale → autocontrast → sharpen → binary threshold → 2× scale."""
@@ -29,195 +35,211 @@ def _preprocess(img: Image.Image, threshold: int = 140) -> Image.Image:
     img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
     return img
 
-# ── OCR helpers ───────────────────────────────────────────────────────────────
+# ── OCR ───────────────────────────────────────────────────────────────────────
 
-_NUMBER_RE = re.compile(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})')
+_NUMBER_RE = re.compile(r'[A-Za-z]{0,5}\s*(\d{1,4})\s*/\s*(\d{1,4})')
+
+_BODY_WORDS = {
+    'search', 'your', 'deck', 'pokemon', 'bench', 'shuffle', 'play',
+    'turn', 'during', 'item', 'trainer', 'supporter', 'stadium', 'tool',
+    'damage', 'energy', 'discard', 'attach', 'draw', 'hand', 'card',
+    'flip', 'coin', 'heads', 'tails', 'effect', 'active', 'retreat',
+    'evolve', 'basic', 'stage', 'special', 'switch',
+}
 
 def _fix_digits(s: str) -> str:
-    """Correct common OCR digit confusions."""
     return (s.replace('O', '0').replace('o', '0')
-             .replace('l', '1').replace('I', '1')
-             .replace('B', '8').replace('S', '5')
-             .replace('Z', '2').replace('z', '2'))
+             .replace('l', '1').replace('B', '8')
+             .replace('S', '5').replace('Z', '2').replace('z', '2'))
 
-def ocr_card_number(img: Image.Image) -> tuple[str | None, int | None]:
+
+def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
     """
-    Return (card_number, set_total) e.g. ('181', 198), or (None, None).
-    Two-pass: broad scan to find the region, then zoom with digits-only whitelist.
+    Scan the full image and return (number, set_total, name).
+    Tries multiple threshold values until it finds a card number.
     """
     if not TESSERACT_OK:
-        return None, None
+        return None, None, None
 
-    w, h = img.size
-    bottom = img.crop((0, int(h * 0.50), w, h))
-    proc = _preprocess(bottom)
+    number, set_total, name = None, None, None
+    best_raw = ''
 
-    # Pass 1 — try multiple thresholds and PSM modes until we find a number
-    raw = ''
-    for thresh in (140, 110, 170):
-        proc = _preprocess(bottom, threshold=thresh)
-        for psm in (6, 11):
-            candidate = pytesseract.image_to_string(proc, config=f'--oem 1 --psm {psm}')
-            if _NUMBER_RE.search(candidate):
-                raw = candidate
-                print(f'[identify] OCR pass1 hit (thresh={thresh} psm={psm}): {candidate.strip()!r}')
-                break
-        if raw:
+    for thresh in (140, 110, 170, 90):
+        proc = _preprocess(img, threshold=thresh)
+        raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 6')
+
+        # Find card number
+        m = _NUMBER_RE.search(raw)
+        if m and not number:
+            try:
+                n = _fix_digits(m.group(1)).lstrip('0') or '0'
+                t = int(_fix_digits(m.group(2)))
+                number, set_total = n, t
+                best_raw = raw
+                print(f'[identify] OCR number={number}/{set_total} (thresh={thresh})')
+            except ValueError:
+                pass
+
+        # Find card name — first clean non-body line
+        if not name:
+            for line in raw.splitlines():
+                clean = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', line).strip()
+                words = clean.split()
+                if (1 <= len(words) <= 5
+                        and re.search(r'[A-Za-z]{3}', clean)
+                        and not re.search(r'\d{2,}', clean)
+                        and len(clean) >= 3
+                        and not any(w in _BODY_WORDS for w in clean.lower().split())):
+                    name = clean
+                    print(f'[identify] OCR name={name!r} (thresh={thresh})')
+                    break
+
+        if number and name:
             break
-    if not raw:
-        # Last resort: use the last attempt
-        print(f'[identify] OCR pass1 no match found')
-    else:
-        print(f'[identify] OCR pass1: {raw.strip()!r}')
 
-    # Pass 2 — zoom into the slash-token region with digits-only whitelist
-    try:
-        data = pytesseract.image_to_data(proc, config='--oem 1 --psm 6',
-                                         output_type=pytesseract.Output.DICT)
-        slash_idx = next(
-            (i for i, t in enumerate(data['text']) if '/' in t and re.search(r'\d', t)),
-            None
-        )
-        if slash_idx is not None:
-            idxs = range(max(0, slash_idx - 1), min(len(data['text']), slash_idx + 2))
-            x1 = min(data['left'][i] for i in idxs)
-            y1 = min(data['top'][i] for i in idxs)
-            x2 = max(data['left'][i] + data['width'][i] for i in idxs)
-            y2 = max(data['top'][i] + data['height'][i] for i in idxs)
-            pad = 12
-            region = proc.crop((max(0, x1 - pad), max(0, y1 - pad), x2 + pad, y2 + pad))
-            region = region.resize((region.width * 3, region.height * 3), Image.LANCZOS)
-            zoomed = pytesseract.image_to_string(
-                region,
-                config='--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789/'
-            ).strip()
-            print(f'[identify] OCR pass2 zoom: {zoomed!r}')
-            m2 = re.search(r'(\d{1,4})/(\d{1,4})', zoomed)
-            if m2:
-                return m2.group(1).lstrip('0') or '0', int(m2.group(2))
-    except Exception as e:
-        print(f'[identify] OCR pass2 error: {e}')
+    # Pass 2: zoom into number region for digit accuracy
+    if number and set_total:
+        try:
+            proc = _preprocess(img, threshold=140)
+            data = pytesseract.image_to_data(
+                proc, config='--oem 1 --psm 6',
+                output_type=pytesseract.Output.DICT
+            )
+            slash_idx = next(
+                (i for i, t in enumerate(data['text'])
+                 if '/' in t and re.search(r'\d', t)), None
+            )
+            if slash_idx is not None:
+                idxs = range(max(0, slash_idx - 1), min(len(data['text']), slash_idx + 2))
+                x1 = min(data['left'][i] for i in idxs)
+                y1 = min(data['top'][i] for i in idxs)
+                x2 = max(data['left'][i] + data['width'][i] for i in idxs)
+                y2 = max(data['top'][i] + data['height'][i] for i in idxs)
+                pad = 12
+                region = proc.crop((max(0, x1-pad), max(0, y1-pad), x2+pad, y2+pad))
+                region = region.resize((region.width * 3, region.height * 3), Image.LANCZOS)
+                zoomed = pytesseract.image_to_string(
+                    region,
+                    config='--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789/'
+                ).strip()
+                m2 = re.search(r'(\d{1,4})/(\d{1,4})', zoomed)
+                if m2:
+                    number = m2.group(1).lstrip('0') or '0'
+                    set_total = int(m2.group(2))
+                    print(f'[identify] OCR zoom: {number}/{set_total}')
+        except Exception as e:
+            print(f'[identify] OCR zoom error: {e}')
 
-    # Fallback — use pass1 raw with digit correction
-    m = _NUMBER_RE.search(raw)
-    if m:
-        num = _fix_digits(m.group(2)).lstrip('0') or '0'
-        total = int(_fix_digits(m.group(3))) if m.group(3).isdigit() else None
-        return num, total
+    return number, set_total, name
 
-    return None, None
+# ── DB lookup ─────────────────────────────────────────────────────────────────
+
+def _db_conn():
+    conn = sqlite3.connect(CARDS_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-def ocr_card_name(img: Image.Image) -> str | None:
-    """
-    Read the card name from the top of the card.
-    Card names are large bold text — try multiple thresholds and crop heights.
-    """
-    if not TESSERACT_OK:
-        return None
-    w, h = img.size
-    # Try a few crop heights — name bar height varies by card type
-    for frac in (0.10, 0.14, 0.18):
-        strip = img.crop((0, 0, w, int(h * frac)))
-        for thresh in (120, 100, 140):
-            proc = _preprocess(strip, threshold=thresh)
-            raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 7').strip()
-            raw = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', raw).strip()
-            if len(raw) >= 3 and re.search(r'[A-Za-z]{3}', raw):
-                print(f'[identify] OCR name (frac={frac} thresh={thresh}): {raw!r}')
-                return raw
-    return None
+def _to_card(r) -> dict:
+    return {
+        'id': r['id'], 'name': r['name'], 'number': r['number'],
+        'set_id': r['set_id'], 'set_name': r['set_name'], 'set_total': r['set_total'],
+        'rarity': r['rarity'], 'supertype': r['supertype'],
+        'image_small': r['image_small'], 'price_market': r['price_market'],
+    }
 
-# ── Local DB lookup ───────────────────────────────────────────────────────────
 
-def _db_search_by_name(name: str) -> list[dict]:
-    """Fuzzy search cards.db by card name."""
+def db_search_name(name: str) -> list[dict]:
     if not os.path.exists(CARDS_DB):
         return []
     try:
-        conn = sqlite3.connect(CARDS_DB)
-        conn.row_factory = sqlite3.Row
-        # Exact match first
+        conn = _db_conn()
         rows = conn.execute(
-            'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 10',
-            (name.lower(),)
+            'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 20', (name.lower(),)
         ).fetchall()
         if not rows:
-            # Contains match
             rows = conn.execute(
                 'SELECT * FROM cards WHERE LOWER(name) LIKE ? LIMIT 20',
                 (f'%{name.lower()}%',)
             ).fetchall()
         conn.close()
-        return [dict(r) for r in rows]
-    except Exception as e:
-        print(f'[identify] DB name search error: {e}')
-        return []
-
-
-def _db_search(number: str, set_total: int | None = None) -> list[dict]:
-    """Query cards.db by card number (and optionally set total)."""
-    if not os.path.exists(CARDS_DB):
-        print('[identify] cards.db not found — run scripts/build_card_db.py')
-        return []
-    try:
-        conn = sqlite3.connect(CARDS_DB)
-        conn.row_factory = sqlite3.Row
-        if set_total:
-            rows = conn.execute(
-                '''SELECT * FROM cards
-                   WHERE CAST(LTRIM(number, "0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
-                   AND set_total = ?
-                   LIMIT 10''',
-                (number, set_total)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                '''SELECT * FROM cards
-                   WHERE CAST(LTRIM(number, "0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
-                   LIMIT 20''',
-                (number,)
-            ).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+        result = [_to_card(r) for r in rows]
+        print(f'[identify] DB name search "{name}": {len(result)} results')
+        return result
     except Exception as e:
         print(f'[identify] DB error: {e}')
         return []
 
 
-def _pick_best(candidates: list[dict], ocr_name: str | None) -> tuple[dict | None, float]:
-    """
-    Pick the best candidate. If we have an OCR name, score by name similarity.
-    Otherwise pick the one from the most recent set (highest set_id alphabetically).
-    """
+def db_search_number(number: str, set_total: int | None = None) -> list[dict]:
+    if not os.path.exists(CARDS_DB):
+        return []
+    try:
+        conn = _db_conn()
+        # Strip leading zeros and letters from stored number for comparison
+        if set_total:
+            rows = conn.execute(
+                '''SELECT * FROM cards
+                   WHERE CAST(LTRIM(number,"0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
+                   AND set_total = ? LIMIT 20''',
+                (number, set_total)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                '''SELECT * FROM cards
+                   WHERE CAST(LTRIM(number,"0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
+                   LIMIT 20''',
+                (number,)
+            ).fetchall()
+        conn.close()
+        result = [_to_card(r) for r in rows]
+        print(f'[identify] DB number search {number}/{set_total}: {len(result)} results')
+        return result
+    except Exception as e:
+        print(f'[identify] DB error: {e}')
+        return []
+
+
+def _name_score(candidate_name: str, ocr_name: str) -> float:
+    """0–1 similarity score between a DB card name and OCR-read name."""
+    a = candidate_name.lower()
+    b = ocr_name.lower()
+    if a == b:
+        return 1.0
+    if a in b or b in a:
+        return 0.85
+    a_words = set(a.split())
+    b_words = set(b.split())
+    overlap = a_words & b_words
+    if overlap:
+        return 0.5 + 0.3 * (len(overlap) / max(len(a_words), len(b_words)))
+    return 0.0
+
+
+def pick_best(candidates: list[dict], ocr_name: str | None) -> tuple[dict | None, float]:
     if not candidates:
         return None, 0.0
     if len(candidates) == 1:
-        return candidates[0], 0.88
+        base = 0.88 if ocr_name else 0.72
+        return candidates[0], base
 
     if ocr_name:
-        ocr_lower = ocr_name.lower()
-        def name_score(c):
-            name = (c.get('name') or '').lower()
-            # Simple overlap score
-            matches = sum(1 for w in name.split() if w in ocr_lower or ocr_lower in w)
-            return matches
-        ranked = sorted(candidates, key=name_score, reverse=True)
-        best = ranked[0]
-        score = name_score(best)
-        confidence = min(0.92, 0.70 + score * 0.08) if score > 0 else 0.65
+        scored = [(c, _name_score(c['name'], ocr_name)) for c in candidates]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        best, score = scored[0]
+        confidence = min(0.95, 0.60 + score * 0.35)
         return best, confidence
 
-    # No name — prefer most recent set (sort by set_id desc as proxy for recency)
+    # No name — prefer most recent set
     ranked = sorted(candidates, key=lambda c: c.get('set_id') or '', reverse=True)
-    return ranked[0], 0.70
+    return ranked[0], 0.60
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def identify_card(img: Image.Image) -> dict:
     """
-    Given a PIL Image of a card, return identification dict.
-    Queries local cards.db — no network calls.
+    Identify a Pokémon card from a PIL Image. Returns a result dict.
+    Confidence: 0.0–1.0. Cards below 0.75 are flagged needs_review=1.
     """
     result = {
         'tcg_id': None, 'name': 'Unknown', 'set_name': None, 'set_code': None,
@@ -226,40 +248,29 @@ def identify_card(img: Image.Image) -> dict:
         'identified_by': 'failed', 'confidence': 0.0, 'needs_review': 1,
     }
 
-    # Step 1: OCR card number and name in parallel
-    number, set_total = ocr_card_number(img)
-    ocr_name = ocr_card_name(img)
-    print(f'[identify] OCR number={number!r} set_total={set_total!r} name={ocr_name!r}')
+    number, set_total, ocr_name = ocr_scan(img)
+    result['card_number'] = f'{number}/{set_total}' if number and set_total else number
 
-    result['card_number'] = f'{number}/{set_total}' if number and set_total else (number or None)
-
-    # Step 2: Name-first lookup — most reliable when name OCR works
     candidates = []
+
+    # Name-first: most reliable signal
     if ocr_name:
-        candidates = _db_search_by_name(ocr_name)
-        print(f'[identify] DB by name: {len(candidates)} candidates')
-        # If we also have a number, filter name results by set_total
+        candidates = db_search_name(ocr_name)
         if candidates and set_total:
             filtered = [c for c in candidates if c.get('set_total') == set_total]
             if filtered:
                 candidates = filtered
-                print(f'[identify] Filtered by set_total={set_total}: {len(candidates)}')
 
-    # Step 3: Fallback to number lookup
+    # Number fallback
     if not candidates and number:
-        candidates = _db_search(number, set_total)
-        print(f'[identify] DB by number: {len(candidates)} candidates')
-        if not candidates:
-            candidates = _db_search(number)
-            print(f'[identify] DB by number (no set filter): {len(candidates)} candidates')
+        candidates = db_search_number(number, set_total)
+    if not candidates and number:
+        candidates = db_search_number(number)
 
     if not candidates:
-        result['identified_by'] = 'failed'
         return result
 
-    # Step 4: Pick best candidate
-    card, confidence = _pick_best(candidates, ocr_name)
-
+    card, confidence = pick_best(candidates, ocr_name)
     if card:
         result.update({
             'tcg_id':          card['id'],
