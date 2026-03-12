@@ -45,8 +45,10 @@ def init_camera():
         if _cv2_cap is None:
             print('[camera] No OpenCV camera found — will use test images')
         else:
+            # Minimize frame buffer so captures are always fresh
+            _cv2_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             # Discard warm-up frames so auto-exposure has time to settle
-            for _ in range(10):
+            for _ in range(15):
                 _cv2_cap.read()
             print('[camera] Warm-up complete')
     else:
@@ -58,6 +60,9 @@ def capture() -> Image.Image:
         arr = _picam.capture_array()
         return Image.fromarray(arr)
     elif _USE_CV2 and _cv2_cap:
+        # Drain stale buffered frames before capturing the live one
+        for _ in range(3):
+            _cv2_cap.grab()
         ret, frame = _cv2_cap.read()
         if not ret:
             raise RuntimeError('OpenCV capture failed')

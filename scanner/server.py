@@ -39,7 +39,7 @@ def _do_scan():
         result = identify_card(img)
 
         # Save scan image
-        scan_path = os.path.join(SCANS_DIR, f'{int(time.time())}.jpg')
+        scan_path = os.path.join(SCANS_DIR, f'{int(time.time() * 1000)}.jpg')
         img.save(scan_path, 'JPEG', quality=85)
         result['scan_image_path'] = scan_path
 
