@@ -36,18 +36,18 @@ def download(url: str) -> bytes:
 def init_db(conn: sqlite3.Connection):
     conn.execute('''
         CREATE TABLE IF NOT EXISTS cards (
-            id              TEXT PRIMARY KEY,
-            name            TEXT,
-            number          TEXT,
-            set_id          TEXT,
-            set_name        TEXT,
-            set_total       INTEGER,
+            id                TEXT PRIMARY KEY,
+            name              TEXT,
+            number            TEXT,
+            set_id            TEXT,
+            set_name          TEXT,
+            set_total         INTEGER,
             set_printed_total INTEGER,
-            rarity          TEXT,
-            supertype       TEXT,
-            image_small     TEXT,
-            image_large     TEXT,
-            price_market    REAL
+            rarity            TEXT,
+            supertype         TEXT,
+            image_small       TEXT,
+            image_large       TEXT,
+            price_market      REAL
         )
     ''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_number   ON cards(number)')
@@ -56,7 +56,38 @@ def init_db(conn: sqlite3.Connection):
     conn.commit()
 
 
-def import_set(conn: sqlite3.Connection, cards: list) -> int:
+def load_sets_meta(z: zipfile.ZipFile) -> dict:
+    """Load set metadata (id → {name, total, printedTotal}) from sets/en.json."""
+    sets = {}
+    # Try sets/en.json (single file) first, then individual files
+    candidates = [n for n in z.namelist() if n.endswith('sets/en.json')]
+    if candidates:
+        data = json.loads(z.read(candidates[0]))
+        for s in data:
+            sets[s['id']] = {
+                'name':         s.get('name', ''),
+                'total':        s.get('total'),
+                'printedTotal': s.get('printedTotal') or s.get('total'),
+            }
+    else:
+        # Fallback: individual set JSON files under sets/en/
+        for fname in z.namelist():
+            if '/sets/en/' in fname and fname.endswith('.json'):
+                try:
+                    s = json.loads(z.read(fname))
+                    sets[s['id']] = {
+                        'name':         s.get('name', ''),
+                        'total':        s.get('total'),
+                        'printedTotal': s.get('printedTotal') or s.get('total'),
+                    }
+                except Exception:
+                    pass
+    return sets
+
+
+def import_set(conn: sqlite3.Connection, set_id: str, cards: list,
+               sets_meta: dict) -> int:
+    meta = sets_meta.get(set_id, {})
     rows = []
     for c in cards:
         prices = c.get('tcgplayer', {}).get('prices', {})
@@ -66,15 +97,17 @@ def import_set(conn: sqlite3.Connection, cards: list) -> int:
             if p:
                 price = p
                 break
-        s = c.get('set', {})
+
+        # set info comes from metadata file; card JSON may not embed it
+        s = c.get('set') or {}
         rows.append((
             c['id'],
             c.get('name'),
             c.get('number'),
-            s.get('id'),
-            s.get('name'),
-            s.get('total'),
-            s.get('printedTotal') or s.get('total'),
+            s.get('id') or set_id,
+            s.get('name') or meta.get('name'),
+            s.get('total') or meta.get('total'),
+            s.get('printedTotal') or meta.get('printedTotal') or s.get('total') or meta.get('total'),
             c.get('rarity'),
             c.get('supertype'),
             c.get('images', {}).get('small'),
@@ -99,6 +132,9 @@ def main():
     zip_bytes = download(DATA_ZIP_URL)
     z = zipfile.ZipFile(io.BytesIO(zip_bytes))
 
+    sets_meta = load_sets_meta(z)
+    print(f'Loaded metadata for {len(sets_meta)} sets')
+
     card_files = sorted(
         n for n in z.namelist()
         if '/cards/en/' in n and n.endswith('.json')
@@ -109,7 +145,7 @@ def main():
     for fname in card_files:
         set_id = fname.split('/')[-1].replace('.json', '')
         cards = json.loads(z.read(fname))
-        n = import_set(conn, cards)
+        n = import_set(conn, set_id, cards, sets_meta)
         print(f'  {set_id:20s}  {n:4d} cards')
         total += n
 
