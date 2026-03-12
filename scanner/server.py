@@ -135,14 +135,14 @@ def preview():
 
 @app.route('/api/scan-image/<int:physical_id>')
 def scan_image(physical_id):
-    """Return base64 scan image for a card."""
+    """Return scan image as raw JPEG."""
+    from flask import Response
     with get_conn() as conn:
         card = get_card_by_physical_id(conn, physical_id)
     if not card or not card.get('scan_image_path') or not os.path.exists(card['scan_image_path']):
         return jsonify({'error': 'No image'}), 404
     with open(card['scan_image_path'], 'rb') as f:
-        data = base64.b64encode(f.read()).decode()
-    return jsonify({'image': f'data:image/jpeg;base64,{data}'})
+        return Response(f.read(), mimetype='image/jpeg')
 
 # Serve React build in production
 if os.path.exists(WEB_BUILD):

@@ -26,32 +26,32 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # ── OCR helpers ──────────────────────────────────────────────────────────────
 
 def preprocess_for_ocr(img: Image.Image) -> Image.Image:
-    """Crop bottom strip of card (card number lives there), boost contrast."""
-    w, h = img.size
-    # Card number is roughly bottom 12% of the card
-    strip = img.crop((0, int(h * 0.85), w, h))
-    strip = strip.convert('L')                          # grayscale
-    strip = ImageEnhance.Contrast(strip).enhance(3.0)   # crank contrast
-    strip = strip.filter(ImageFilter.SHARPEN)
-    strip = strip.resize((strip.width * 3, strip.height * 3), Image.LANCZOS)
-    return strip
+    """Boost contrast and sharpen the full image for OCR."""
+    img = img.convert('L')
+    img = ImageEnhance.Contrast(img).enhance(2.5)
+    img = img.filter(ImageFilter.SHARPEN)
+    return img
 
 def ocr_card_number(img: Image.Image) -> str | None:
-    """Return raw card number string like '045/189' or 'SVIm 181/198', or None."""
+    """
+    Search the full image for a card number pattern like '181/198' or 'SV181/SV198'.
+    Card number can be anywhere — we search rather than crop to a fixed region.
+    """
     if not TESSERACT_OK:
         return None
-    strip = preprocess_for_ocr(img)
-    # Try multiple PSM modes — card numbers are short, single-line text
-    for psm in (7, 6, 8):
-        raw = pytesseract.image_to_string(strip, config=f'--psm {psm}')
-        raw = raw.strip()
-        print(f'[identify] OCR psm={psm} raw: {raw!r}')
-        # Match number patterns: 181/198, SV181/SV198, SVIm 181/198 etc.
-        m = re.search(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw)
-        if m:
-            num = f'{m.group(2)}/{m.group(3)}'
-            print(f'[identify] OCR matched: {num!r}')
-            return num
+    processed = preprocess_for_ocr(img)
+    # PSM 6 = assume uniform block of text — best for scanning full image
+    raw = pytesseract.image_to_string(processed, config='--psm 6')
+    print(f'[identify] OCR full raw: {raw!r}')
+    # Find all slash-number patterns in the text
+    matches = re.findall(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw)
+    print(f'[identify] OCR matches: {matches}')
+    if matches:
+        # Take the last match — card number is near the bottom
+        m = matches[-1]
+        num = f'{m[1]}/{m[2]}'
+        print(f'[identify] OCR result: {num!r}')
+        return num
     return None
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
