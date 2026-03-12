@@ -281,6 +281,18 @@ def identify_card(img: Image.Image) -> dict:
     if not num_candidates and number:
         num_candidates = db_search_number(number)
 
+    # If name search returned multiple candidates but number search failed,
+    # try to narrow by set_total — the printed total on the card tells us which set
+    if name_candidates and set_total and not num_candidates:
+        filtered_by_total = [
+            c for c in name_candidates
+            if c.get('set_total') == set_total
+            or c.get('set_printed_total') == set_total
+        ]
+        if filtered_by_total:
+            print(f'[identify] Filtered {len(name_candidates)} → {len(filtered_by_total)} by set_total={set_total}')
+            name_candidates = filtered_by_total
+
     # Cross-reference: cards in BOTH lists get highest confidence
     if name_candidates and num_candidates:
         name_ids = {c['id'] for c in name_candidates}
@@ -289,11 +301,9 @@ def identify_card(img: Image.Image) -> dict:
         if intersection_ids:
             candidates = [c for c in name_candidates if c['id'] in intersection_ids]
             print(f'[identify] Cross-ref hit: {len(candidates)} card(s) in both name+number results')
-            # Boost confidence for cross-ref matches
             card, confidence = pick_best(candidates, ocr_name)
             confidence = min(0.97, confidence + 0.10)
         else:
-            # No overlap — name signal is stronger, use it but flag lower confidence
             candidates = name_candidates or num_candidates
             print(f'[identify] No cross-ref overlap — using {"name" if name_candidates else "number"} results')
             card, confidence = pick_best(candidates, ocr_name)
