@@ -11,7 +11,7 @@ Confidence levels:
 import os
 import re
 import sqlite3
-from difflib import get_close_matches
+from difflib import get_close_matches, SequenceMatcher
 
 from PIL import Image, ImageFilter
 import PIL.ImageOps
@@ -113,19 +113,24 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None, str 
                     pass
 
         # ── Card name ─────────────────────────────────────────────────────────
+        # Score every line against the card name cache — highest match wins
         if not name:
+            cache = _get_name_cache()
+            best_line, best_score = None, 0.0
             for line in raw.splitlines():
                 clean = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', line).strip()
-                words = [w for w in clean.split() if len(w) >= 3]
-                if (1 <= len(words) <= 4
-                        and re.search(r'[A-Za-z]{3}', clean)
-                        and not re.search(r'\d{2,}', clean)
-                        and len(clean) >= 4
-                        and sum(c.isalpha() for c in clean) / max(len(clean), 1) >= 0.6
-                        and not any(w in _BODY_WORDS for w in clean.lower().split())):
-                    name = clean
-                    print(f'[identify] OCR name: {name!r} (thresh={thresh})')
-                    break
+                if len(clean) < 3 or len(clean) > 40:
+                    continue
+                if re.search(r'\d{3,}', clean):  # skip lines heavy with numbers
+                    continue
+                close = get_close_matches(clean.lower(), cache, n=1, cutoff=0.5)
+                if close:
+                    score = SequenceMatcher(None, clean.lower(), close[0]).ratio()
+                    if score > best_score:
+                        best_score, best_line = score, clean
+            if best_line and best_score >= 0.55:
+                name = best_line
+                print(f'[identify] OCR name: {name!r} score={best_score:.2f} (thresh={thresh})')
 
         if number and name:
             break
