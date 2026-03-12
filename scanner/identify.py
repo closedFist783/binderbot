@@ -28,23 +28,31 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 def preprocess_for_ocr(img: Image.Image) -> Image.Image:
     """Crop bottom strip of card (card number lives there), boost contrast."""
     w, h = img.size
-    # Card number is roughly bottom 8% of the card
-    strip = img.crop((0, int(h * 0.88), w, h))
+    # Card number is roughly bottom 12% of the card
+    strip = img.crop((0, int(h * 0.85), w, h))
     strip = strip.convert('L')                          # grayscale
     strip = ImageEnhance.Contrast(strip).enhance(3.0)   # crank contrast
+    strip = strip.filter(ImageFilter.SHARPEN)
     strip = strip.resize((strip.width * 3, strip.height * 3), Image.LANCZOS)
     return strip
 
 def ocr_card_number(img: Image.Image) -> str | None:
-    """Return raw card number string like '045/189' or 'SV045/SV196', or None."""
+    """Return raw card number string like '045/189' or 'SVIm 181/198', or None."""
     if not TESSERACT_OK:
         return None
     strip = preprocess_for_ocr(img)
-    raw = pytesseract.image_to_string(strip, config='--psm 7 -c tessedit_char_whitelist=0123456789/SV')
-    raw = raw.strip().replace('\n', '').replace(' ', '')
-    # Match standard number like 045/189 or SV045/SV196
-    m = re.search(r'([A-Z]{0,3}\d{1,4})/([A-Z]{0,3}\d{1,4})', raw)
-    return m.group(0) if m else None
+    # Try multiple PSM modes — card numbers are short, single-line text
+    for psm in (7, 6, 8):
+        raw = pytesseract.image_to_string(strip, config=f'--psm {psm}')
+        raw = raw.strip()
+        print(f'[identify] OCR psm={psm} raw: {raw!r}')
+        # Match number patterns: 181/198, SV181/SV198, SVIm 181/198 etc.
+        m = re.search(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw)
+        if m:
+            num = f'{m.group(2)}/{m.group(3)}'
+            print(f'[identify] OCR matched: {num!r}')
+            return num
+    return None
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
 

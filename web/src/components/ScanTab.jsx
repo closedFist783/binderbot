@@ -36,9 +36,17 @@ export default function ScanTab({ status }) {
 
       {lastCard && (
         <div className="last-scan-card">
+          {/* Scan image from camera */}
+          <img
+            src={`${import.meta.env.VITE_API_URL}/api/scan-image/${lastCard.physical_id}?t=${Date.now()}`}
+            alt="scan"
+            style={{ width: 80, height: 112, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: 'var(--surface2)' }}
+            onError={e => { e.target.style.display = 'none' }}
+          />
+          {/* API card image if identified */}
           {lastCard.image_url
-            ? <img src={lastCard.image_url} alt={lastCard.name} />
-            : <div style={{ width: 80, height: 112, background: 'var(--surface2)', borderRadius: 4, flexShrink: 0 }} />
+            ? <img src={lastCard.image_url} alt={lastCard.name} style={{ width: 80, height: 112, objectFit: 'contain', borderRadius: 4, flexShrink: 0 }} />
+            : <div style={{ width: 80, height: 112, background: 'var(--surface2)', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>?</div>
           }
           <div className="last-scan-info">
             <div className="pid-badge">#{lastCard.physical_id}</div>
