@@ -74,37 +74,45 @@ def _fix_digits(s: str) -> str:
              .replace('S', '5').replace('Z', '2').replace('z', '2'))
 
 
-def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
+def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None, str | None]:
     """
-    Scan the full image and return (number, set_total, name).
-    Tries multiple threshold values until it finds a card number.
+    Scan the full image and return (number_stripped, set_total, name, number_display).
+    - number_stripped: e.g. '181'  — used for DB lookup (leading zeros removed)
+    - set_total:       e.g. 198    — used for DB filtering
+    - name:            e.g. 'Nest Ball' — used for fuzzy name search
+    - number_display:  e.g. '181/198'  — shown in UI (preserves original OCR string)
     """
     if not TESSERACT_OK:
-        return None, None, None
+        return None, None, None, None
 
     number, set_total, name, number_display = None, None, None, None
-    best_raw = ''
 
+    # Try thresholds until we find both number and name (or exhaust options)
     for thresh in (140, 110, 170, 90):
         proc = _preprocess(img, threshold=thresh)
         raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 6')
 
-        # Find card number
-        m = _NUMBER_RE.search(raw)
-        if m and not number:
-            try:
+        # ── Card number ───────────────────────────────────────────────────────
+        # Pattern: optional prefix letters, then NNN/NNN (e.g. 181/198, 005/064)
+        if not number:
+            # Look for ALL slash-number matches, take the last one (closest to bottom)
+            all_matches = list(re.finditer(r'(\d{1,4})\s*/\s*(\d{2,4})', raw))
+            if all_matches:
+                m = all_matches[-1]
                 raw_n = _fix_digits(m.group(1))
                 raw_t = _fix_digits(m.group(2))
-                t = int(raw_t)
-                number = raw_n.lstrip('0') or '0'
-                number_display = f'{raw_n}/{raw_t}'  # preserve original padding
-                set_total = t
-                best_raw = raw
-                print(f'[identify] OCR number={number}/{set_total} (thresh={thresh})')
-            except ValueError:
-                pass
+                try:
+                    t = int(raw_t)
+                    # Sanity check: set total should be plausible (10–300)
+                    if 10 <= t <= 400:
+                        number = raw_n.lstrip('0') or '0'
+                        number_display = f'{raw_n}/{raw_t}'
+                        set_total = t
+                        print(f'[identify] OCR number: {number_display} (thresh={thresh})')
+                except ValueError:
+                    pass
 
-        # Find card name — first clean non-body line with real words
+        # ── Card name ─────────────────────────────────────────────────────────
         if not name:
             for line in raw.splitlines():
                 clean = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', line).strip()
@@ -113,49 +121,14 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
                         and re.search(r'[A-Za-z]{3}', clean)
                         and not re.search(r'\d{2,}', clean)
                         and len(clean) >= 4
-                        and sum(c.isalpha() for c in clean) >= len(clean) * 0.6
+                        and sum(c.isalpha() for c in clean) / max(len(clean), 1) >= 0.6
                         and not any(w in _BODY_WORDS for w in clean.lower().split())):
                     name = clean
-                    print(f'[identify] OCR name={name!r} (thresh={thresh})')
+                    print(f'[identify] OCR name: {name!r} (thresh={thresh})')
                     break
 
         if number and name:
             break
-
-    # Pass 2: zoom into number region for digit accuracy
-    if number and set_total:
-        try:
-            proc = _preprocess(img, threshold=140)
-            data = pytesseract.image_to_data(
-                proc, config='--oem 1 --psm 6',
-                output_type=pytesseract.Output.DICT
-            )
-            slash_idx = next(
-                (i for i, t in enumerate(data['text'])
-                 if '/' in t and re.search(r'\d', t)), None
-            )
-            if slash_idx is not None:
-                idxs = range(max(0, slash_idx - 1), min(len(data['text']), slash_idx + 2))
-                x1 = min(data['left'][i] for i in idxs)
-                y1 = min(data['top'][i] for i in idxs)
-                x2 = max(data['left'][i] + data['width'][i] for i in idxs)
-                y2 = max(data['top'][i] + data['height'][i] for i in idxs)
-                pad = 12
-                region = proc.crop((max(0, x1-pad), max(0, y1-pad), x2+pad, y2+pad))
-                region = region.resize((region.width * 3, region.height * 3), Image.LANCZOS)
-                zoomed = pytesseract.image_to_string(
-                    region,
-                    config='--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789/'
-                ).strip()
-                m2 = re.search(r'(\d{1,4})/(\d{1,4})', zoomed)
-                if m2:
-                    raw_n2, raw_t2 = m2.group(1), m2.group(2)
-                    number = raw_n2.lstrip('0') or '0'
-                    set_total = int(raw_t2)
-                    number_display = f'{raw_n2}/{raw_t2}'
-                    print(f'[identify] OCR zoom: {number_display}')
-        except Exception as e:
-            print(f'[identify] OCR zoom error: {e}')
 
     return number, set_total, name, number_display
 
