@@ -292,26 +292,37 @@ def identify_card(img: Image.Image) -> dict:
     number, set_total, ocr_name = ocr_scan(img)
     result['card_number'] = f'{number}/{set_total}' if number and set_total else number
 
-    candidates = []
+    # Get candidates from both signals independently
+    name_candidates = db_search_name(ocr_name) if ocr_name else []
+    num_candidates  = db_search_number(number, set_total) if number else []
+    if not num_candidates and number:
+        num_candidates = db_search_number(number)
 
-    # Name-first: most reliable signal
-    if ocr_name:
-        candidates = db_search_name(ocr_name)
-        if candidates and set_total:
-            filtered = [c for c in candidates if c.get('set_total') == set_total]
-            if filtered:
-                candidates = filtered
-
-    # Number fallback
-    if not candidates and number:
-        candidates = db_search_number(number, set_total)
-    if not candidates and number:
-        candidates = db_search_number(number)
-
-    if not candidates:
+    # Cross-reference: cards in BOTH lists get highest confidence
+    if name_candidates and num_candidates:
+        name_ids = {c['id'] for c in name_candidates}
+        num_ids  = {c['id'] for c in num_candidates}
+        intersection_ids = name_ids & num_ids
+        if intersection_ids:
+            candidates = [c for c in name_candidates if c['id'] in intersection_ids]
+            print(f'[identify] Cross-ref hit: {len(candidates)} card(s) in both name+number results')
+            # Boost confidence for cross-ref matches
+            card, confidence = pick_best(candidates, ocr_name)
+            confidence = min(0.97, confidence + 0.10)
+        else:
+            # No overlap — name signal is stronger, use it but flag lower confidence
+            candidates = name_candidates or num_candidates
+            print(f'[identify] No cross-ref overlap — using {"name" if name_candidates else "number"} results')
+            card, confidence = pick_best(candidates, ocr_name)
+            confidence = max(0.0, confidence - 0.10)
+    elif name_candidates:
+        candidates = name_candidates
+        card, confidence = pick_best(candidates, ocr_name)
+    elif num_candidates:
+        candidates = num_candidates
+        card, confidence = pick_best(candidates, ocr_name)
+    else:
         return result
-
-    card, confidence = pick_best(candidates, ocr_name)
     if card:
         result.update({
             'tcg_id':          card['id'],
