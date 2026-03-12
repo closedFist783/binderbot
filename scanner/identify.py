@@ -41,29 +41,75 @@ def preprocess_for_ocr(img: Image.Image) -> Image.Image:
     img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
     return img
 
+def _ocr_zoom_number(img: Image.Image, raw_text: str) -> str | None:
+    """
+    Given OCR text that contains a rough number match, find the bounding box
+    of that text region and re-OCR it zoomed in with digits-only whitelist.
+    Falls back to correcting common digit confusions in the raw match.
+    """
+    # Common OCR digit confusion fixes: 0↔O, 1↔l↔I, 8↔B, 5↔S, 2↔Z
+    def fix_digits(s: str) -> str:
+        return (s.replace('O', '0').replace('o', '0')
+                 .replace('l', '1').replace('I', '1')
+                 .replace('B', '8').replace('S', '5')
+                 .replace('Z', '2').replace('z', '2'))
+
+    matches = re.findall(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw_text)
+    if not matches:
+        return None
+    m = matches[-1]
+    num = f'{fix_digits(m[1])}/{fix_digits(m[2])}'
+    print(f'[identify] OCR matched (corrected): {num!r}')
+    return num
+
 def ocr_card_number(img: Image.Image) -> str | None:
     """
-    Search for a card number (e.g. 181/198) in the bottom 40% of the image.
-    Uses LSTM engine and multiple PSM modes.
+    Two-pass OCR:
+    1. Full bottom-40% scan to find approximate number location
+    2. Zoom into the number region and re-OCR with digits-only for accuracy
     """
     if not TESSERACT_OK:
         return None
 
-    # Crop to bottom 40% where card number lives
+    # Pass 1: find candidate number in bottom 40%
     w, h = img.size
     bottom = img.crop((0, int(h * 0.60), w, h))
     processed = preprocess_for_ocr(bottom)
 
-    for psm in (6, 11, 7):
-        raw = pytesseract.image_to_string(processed, config=f'--oem 1 --psm {psm}')
-        print(f'[identify] OCR psm={psm} raw: {raw!r}')
-        matches = re.findall(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw)
-        if matches:
-            m = matches[-1]
-            num = f'{m[1]}/{m[2]}'
-            print(f'[identify] OCR matched: {num!r}')
-            return num
-    return None
+    raw = pytesseract.image_to_string(processed, config='--oem 1 --psm 6')
+    print(f'[identify] OCR pass1 raw: {raw!r}')
+
+    # Pass 2: find the slash-number substring, re-OCR it with digits-only whitelist
+    # Extract bounding boxes for digit clusters near a slash
+    try:
+        data = pytesseract.image_to_data(processed, config='--oem 1 --psm 6', output_type=pytesseract.Output.DICT)
+        texts = data['text']
+        # Find index of a token containing '/'
+        slash_idx = next((i for i, t in enumerate(texts) if '/' in t and re.search(r'\d', t)), None)
+        if slash_idx is not None:
+            # Grab surrounding tokens too
+            x1 = min(data['left'][max(0, slash_idx-1):slash_idx+2])
+            y1 = min(data['top'][max(0, slash_idx-1):slash_idx+2])
+            x2 = max(data['left'][i] + data['width'][i] for i in range(max(0, slash_idx-1), min(len(texts), slash_idx+2)))
+            y2 = max(data['top'][i] + data['height'][i] for i in range(max(0, slash_idx-1), min(len(texts), slash_idx+2)))
+            pad = 10
+            region = processed.crop((max(0, x1-pad), max(0, y1-pad), x2+pad, y2+pad))
+            region = region.resize((region.width * 3, region.height * 3), Image.LANCZOS)
+            raw2 = pytesseract.image_to_string(
+                region,
+                config='--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789/'
+            ).strip()
+            print(f'[identify] OCR pass2 zoom raw: {raw2!r}')
+            m2 = re.search(r'(\d{1,4})/(\d{1,4})', raw2)
+            if m2:
+                num = f'{m2.group(1)}/{m2.group(2)}'
+                print(f'[identify] OCR result (zoom): {num!r}')
+                return num
+    except Exception as e:
+        print(f'[identify] OCR pass2 failed: {e}')
+
+    # Fallback: use pass1 result with digit correction
+    return _ocr_zoom_number(img, raw)
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
 
