@@ -139,8 +139,7 @@ def preview_ocr():
     from flask import Response
     from identify import _preprocess
     img = capture()
-    w, h = img.size
-    processed = _preprocess(img.crop((0, int(h * 0.50), w, h)))
+    processed = _preprocess(img)
     buf = io.BytesIO()
     processed.save(buf, 'JPEG', quality=90)
     buf.seek(0)

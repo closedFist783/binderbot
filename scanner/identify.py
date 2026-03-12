@@ -101,15 +101,16 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
             except ValueError:
                 pass
 
-        # Find card name — first clean non-body line
+        # Find card name — first clean non-body line with real words
         if not name:
             for line in raw.splitlines():
                 clean = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', line).strip()
-                words = clean.split()
-                if (1 <= len(words) <= 5
+                words = [w for w in clean.split() if len(w) >= 3]
+                if (1 <= len(words) <= 4
                         and re.search(r'[A-Za-z]{3}', clean)
                         and not re.search(r'\d{2,}', clean)
-                        and len(clean) >= 3
+                        and len(clean) >= 4
+                        and sum(c.isalpha() for c in clean) >= len(clean) * 0.6
                         and not any(w in _BODY_WORDS for w in clean.lower().split())):
                     name = clean
                     print(f'[identify] OCR name={name!r} (thresh={thresh})')
