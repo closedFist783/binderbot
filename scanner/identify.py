@@ -114,27 +114,26 @@ def ocr_card_number(img: Image.Image) -> str | None:
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
 
 import ssl
-from requests.adapters import HTTPAdapter
-
-class _HTTP1Adapter(HTTPAdapter):
-    """Force HTTP/1.1 — prevents H2 ALPN negotiation stalling on the Pi."""
-    def init_poolmanager(self, *args, **kwargs):
-        ctx = ssl.create_default_context()
-        ctx.set_alpn_protocols(['http/1.1'])
-        kwargs['ssl_context'] = ctx
-        super().init_poolmanager(*args, **kwargs)
-
-_session = requests.Session()
-_session.mount('https://', _HTTP1Adapter())
+import http.client
+import urllib.parse
+import json as _json
 
 def _api_get(path, params=None, retries=2):
-    headers = {'X-Api-Key': API_KEY} if API_KEY else {}
+    """HTTP/1.1 only via stdlib http.client — avoids H2 ALPN stall on Pi."""
+    url_path = f'/v2/{path}'
+    if params:
+        url_path += '?' + urllib.parse.urlencode(params)
+    hdrs = {'X-Api-Key': API_KEY} if API_KEY else {}
     last_err = None
     for attempt in range(retries + 1):
         try:
-            r = _session.get(f'{POKEMON_TCG_API}/{path}', params=params, headers=headers, timeout=15)
-            r.raise_for_status()
-            return r.json()
+            ctx = ssl.create_default_context()
+            conn = http.client.HTTPSConnection('api.pokemontcg.io', context=ctx, timeout=15)
+            conn.request('GET', url_path, headers=hdrs)
+            resp = conn.getresponse()
+            data = _json.loads(resp.read().decode())
+            conn.close()
+            return data
         except Exception as e:
             last_err = e
             if attempt < retries:
