@@ -113,23 +113,19 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None, str 
                     pass
 
         # ── Card name ─────────────────────────────────────────────────────────
-        # Score EVERY non-empty line against the card name cache.
-        # Log all candidates so we can see what OCR is reading.
-        # Pick the line with the highest match score.
+        # Score every non-empty line against the card name cache; pick best.
         if not name:
             cache = _get_name_cache()
             best_line, best_score = None, 0.0
-            print(f'[identify] --- OCR lines (thresh={thresh}) ---')
             for line in raw.splitlines():
                 clean = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', line).strip()
                 if not clean or len(clean) < 3:
                     continue
                 close = get_close_matches(clean.lower(), cache, n=1, cutoff=0.4)
-                score = SequenceMatcher(None, clean.lower(), close[0]).ratio() if close else 0.0
-                print(f'[identify]   {clean!r:30s} → {close[0] if close else "-":20s} ({score:.2f})')
-                if score > best_score:
-                    best_score, best_line = score, clean
-            print(f'[identify] --- end lines ---')
+                if close:
+                    score = SequenceMatcher(None, clean.lower(), close[0]).ratio()
+                    if score > best_score:
+                        best_score, best_line = score, clean
             if best_line and best_score >= 0.55:
                 name = best_line
                 print(f'[identify] OCR name: {name!r} score={best_score:.2f} (thresh={thresh})')
