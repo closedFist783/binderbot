@@ -11,9 +11,30 @@ Confidence levels:
 import os
 import re
 import sqlite3
+from difflib import get_close_matches
 
 from PIL import Image, ImageFilter
 import PIL.ImageOps
+
+# Cache of all card names loaded from DB at first use
+_name_cache: list[str] | None = None
+
+def _get_name_cache() -> list[str]:
+    global _name_cache
+    if _name_cache is not None:
+        return _name_cache
+    if not os.path.exists(CARDS_DB):
+        return []
+    try:
+        conn = sqlite3.connect(CARDS_DB)
+        rows = conn.execute('SELECT DISTINCT LOWER(name) FROM cards').fetchall()
+        conn.close()
+        _name_cache = [r[0] for r in rows]
+        print(f'[identify] Loaded {len(_name_cache)} card names into cache')
+    except Exception as e:
+        print(f'[identify] Name cache error: {e}')
+        _name_cache = []
+    return _name_cache
 
 try:
     import pytesseract
@@ -149,67 +170,39 @@ def _to_card(r) -> dict:
     }
 
 
-def _name_variants(name: str) -> list[str]:
-    """Generate OCR-error variants of a name to try in DB searches."""
-    variants = [name]
-    # Common OCR letter confusions in words: i↔l, rn↔m, 0↔O, etc.
-    subs = [('i', 'l'), ('l', 'i'), ('rn', 'm'), ('m', 'rn'),
-            ('ii', 'll'), ('ll', 'ii'), ('1', 'l'), ('0', 'o')]
-    for a, b in subs:
-        v = name.replace(a, b)
-        if v != name and v not in variants:
-            variants.append(v)
-    return variants
-
-
 def db_search_name(name: str) -> list[dict]:
+    """
+    Fuzzy name search using difflib against the full card name list.
+    Handles any OCR error, not just known substitutions.
+    """
     if not os.path.exists(CARDS_DB):
         return []
     try:
+        all_names = _get_name_cache()
+        query = name.lower()
+
+        # Find closest matching names (cutoff=0.6 = 60% similarity)
+        matches = get_close_matches(query, all_names, n=5, cutoff=0.6)
+        if not matches:
+            # Try with each word individually as fallback
+            for word in query.split():
+                if len(word) >= 4:
+                    word_matches = get_close_matches(word, all_names, n=5, cutoff=0.65)
+                    matches.extend(word_matches)
+            matches = list(dict.fromkeys(matches))  # dedupe
+
+        if not matches:
+            print(f'[identify] No fuzzy matches for "{name}"')
+            return []
+
+        print(f'[identify] Fuzzy matches for "{name}": {matches}')
+
         conn = _db_conn()
-        rows = []
-
-        # 1. Exact match
+        placeholders = ','.join('?' * len(matches))
         rows = conn.execute(
-            'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 20', (name.lower(),)
+            f'SELECT * FROM cards WHERE LOWER(name) IN ({placeholders}) LIMIT 30',
+            matches
         ).fetchall()
-
-        # 2. Try OCR variants (e.g. "Nest Bail" → "Nest Ball")
-        if not rows:
-            for variant in _name_variants(name):
-                if variant == name:
-                    continue
-                rows = conn.execute(
-                    'SELECT * FROM cards WHERE LOWER(name) = ? LIMIT 20',
-                    (variant.lower(),)
-                ).fetchall()
-                if rows:
-                    print(f'[identify] Name variant match: "{name}" → "{variant}"')
-                    break
-
-        # 3. Full phrase LIKE
-        if not rows:
-            rows = conn.execute(
-                'SELECT * FROM cards WHERE LOWER(name) LIKE ? LIMIT 20',
-                (f'%{name.lower()}%',)
-            ).fetchall()
-
-        # 4. Word-by-word: search by each significant word individually
-        if not rows:
-            words = [w for w in name.split() if len(w) >= 4]
-            for word in words:
-                for variant in _name_variants(word):
-                    r = conn.execute(
-                        'SELECT * FROM cards WHERE LOWER(name) LIKE ? LIMIT 20',
-                        (f'%{variant.lower()}%',)
-                    ).fetchall()
-                    if r:
-                        rows = r
-                        print(f'[identify] Word match: "{word}" → "{variant}"')
-                        break
-                if rows:
-                    break
-
         conn.close()
         result = [_to_card(r) for r in rows]
         print(f'[identify] DB name search "{name}": {len(result)} results')
