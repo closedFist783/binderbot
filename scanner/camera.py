@@ -44,6 +44,11 @@ def init_camera():
             cap.release()
         if _cv2_cap is None:
             print('[camera] No OpenCV camera found — will use test images')
+        else:
+            # Discard warm-up frames so auto-exposure has time to settle
+            for _ in range(10):
+                _cv2_cap.read()
+            print('[camera] Warm-up complete')
     else:
         print('[camera] No camera found — will use test images')
 
