@@ -82,7 +82,7 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
     if not TESSERACT_OK:
         return None, None, None
 
-    number, set_total, name = None, None, None
+    number, set_total, name, number_display = None, None, None, None
     best_raw = ''
 
     for thresh in (140, 110, 170, 90):
@@ -149,13 +149,15 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None]:
                 ).strip()
                 m2 = re.search(r'(\d{1,4})/(\d{1,4})', zoomed)
                 if m2:
-                    number = m2.group(1).lstrip('0') or '0'
-                    set_total = int(m2.group(2))
-                    print(f'[identify] OCR zoom: {number}/{set_total}')
+                    raw_n2, raw_t2 = m2.group(1), m2.group(2)
+                    number = raw_n2.lstrip('0') or '0'
+                    set_total = int(raw_t2)
+                    number_display = f'{raw_n2}/{raw_t2}'
+                    print(f'[identify] OCR zoom: {number_display}')
         except Exception as e:
             print(f'[identify] OCR zoom error: {e}')
 
-    return number, set_total, name, locals().get('number_display')
+    return number, set_total, name, number_display
 
 # ── DB lookup ─────────────────────────────────────────────────────────────────
 
