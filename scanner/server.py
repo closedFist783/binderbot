@@ -125,12 +125,13 @@ def locate_card(name):
 
 @app.route('/api/preview')
 def preview():
-    """Return a live camera snapshot as base64 JPEG — for debugging framing/focus."""
+    """Return a live camera snapshot as a JPEG image — open directly in browser."""
+    from flask import Response
     img = capture()
     buf = io.BytesIO()
     img.save(buf, 'JPEG', quality=75)
-    data = base64.b64encode(buf.getvalue()).decode()
-    return jsonify({'image': f'data:image/jpeg;base64,{data}'})
+    buf.seek(0)
+    return Response(buf.read(), mimetype='image/jpeg')
 
 @app.route('/api/scan-image/<int:physical_id>')
 def scan_image(physical_id):
