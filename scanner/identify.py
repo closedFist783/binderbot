@@ -113,24 +113,35 @@ def ocr_scan(img: Image.Image) -> tuple[str | None, int | None, str | None, str 
                     pass
 
         # ── Card name ─────────────────────────────────────────────────────────
-        # Score every line against the card name cache — highest match wins
+        # Score each line against the card name cache.
+        # Card names are short (1-3 words, ≤20 chars) and near the top.
+        # Take the FIRST line that scores ≥0.72 (strong match), or the best
+        # short line ≥0.55 if nothing strong is found.
         if not name:
             cache = _get_name_cache()
             best_line, best_score = None, 0.0
+            first_strong = None
             for line in raw.splitlines():
                 clean = re.sub(r'[^A-Za-z0-9\'\- ]+', ' ', line).strip()
-                if len(clean) < 3 or len(clean) > 40:
-                    continue
-                if re.search(r'\d{3,}', clean):  # skip lines heavy with numbers
+                words = clean.split()
+                # Card names: 1–4 words, ≤22 chars, mostly letters
+                if (not clean or len(clean) < 3 or len(clean) > 22
+                        or len(words) > 4
+                        or re.search(r'\d{2,}', clean)):
                     continue
                 close = get_close_matches(clean.lower(), cache, n=1, cutoff=0.5)
                 if close:
                     score = SequenceMatcher(None, clean.lower(), close[0]).ratio()
+                    if score >= 0.72 and not first_strong:
+                        first_strong = (clean, score)
                     if score > best_score:
                         best_score, best_line = score, clean
-            if best_line and best_score >= 0.55:
-                name = best_line
-                print(f'[identify] OCR name: {name!r} score={best_score:.2f} (thresh={thresh})')
+            # Prefer first strong match (top of card) over overall best
+            picked = first_strong[0] if first_strong else best_line
+            picked_score = first_strong[1] if first_strong else best_score
+            if picked and picked_score >= 0.55:
+                name = picked
+                print(f'[identify] OCR name: {name!r} score={picked_score:.2f} (thresh={thresh})')
 
         if number and name:
             break
