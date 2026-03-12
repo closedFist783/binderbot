@@ -67,6 +67,13 @@ def ocr_card_number(img: Image.Image) -> str | None:
 
 # ── PokéTCG API ──────────────────────────────────────────────────────────────
 
+import socket
+# Force IPv4 — Pi resolves to IPv6 but has no IPv6 route
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_getaddrinfo(host, port, family=0, *args, **kwargs):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, *args, **kwargs)
+socket.getaddrinfo = _ipv4_getaddrinfo
+
 def _api_get(path, params=None, retries=2):
     headers = {'X-Api-Key': API_KEY} if API_KEY else {}
     last_err = None
