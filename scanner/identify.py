@@ -1,262 +1,179 @@
 """
-Card identification: OCR the card number → PokéTCG API lookup.
-Falls back to perceptual hash matching if OCR fails.
+Card identification — OCR the card number + name, look up in local cards.db.
+No network calls. Run scripts/build_card_db.py once to populate the database.
 """
-import re
-import json
 import os
-import time
-import requests
+import re
 import sqlite3
+
 from PIL import Image, ImageFilter, ImageEnhance
-import imagehash
+import PIL.ImageOps
 
 try:
     import pytesseract
     TESSERACT_OK = True
 except ImportError:
     TESSERACT_OK = False
-
-POKEMON_TCG_API = 'https://api.pokemontcg.io/v2'
-API_KEY = os.environ.get('POKEMON_TCG_API_KEY', '')  # optional — raises rate limit from 100 to 1000/day
-
-CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache')
-os.makedirs(CACHE_DIR, exist_ok=True)
+    print('[identify] WARNING: pytesseract not installed — OCR disabled')
 
 CARDS_DB = os.path.join(os.path.dirname(__file__), '..', 'cards.db')
 
-# ── OCR helpers ──────────────────────────────────────────────────────────────
+# ── Image preprocessing ───────────────────────────────────────────────────────
 
-def preprocess_for_ocr(img: Image.Image) -> Image.Image:
-    """
-    Prepare image for OCR: autocontrast, sharpen, binarize.
-    Avoids over-boosting contrast which blows out light card backgrounds.
-    """
-    import PIL.ImageOps
+def _preprocess(img: Image.Image) -> Image.Image:
+    """Greyscale → autocontrast → sharpen → binary threshold → 2× scale."""
     img = img.convert('L')
-    # Autocontrast: stretch histogram without crushing highlights
     img = PIL.ImageOps.autocontrast(img, cutoff=2)
     img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
-    # Binary threshold — text is dark on light background
     img = img.point(lambda x: 0 if x < 160 else 255)
-    # Scale up for Tesseract
     img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
     return img
 
-def _ocr_zoom_number(img: Image.Image, raw_text: str) -> str | None:
-    """
-    Given OCR text that contains a rough number match, find the bounding box
-    of that text region and re-OCR it zoomed in with digits-only whitelist.
-    Falls back to correcting common digit confusions in the raw match.
-    """
-    # Common OCR digit confusion fixes: 0↔O, 1↔l↔I, 8↔B, 5↔S, 2↔Z
-    def fix_digits(s: str) -> str:
-        return (s.replace('O', '0').replace('o', '0')
-                 .replace('l', '1').replace('I', '1')
-                 .replace('B', '8').replace('S', '5')
-                 .replace('Z', '2').replace('z', '2'))
+# ── OCR helpers ───────────────────────────────────────────────────────────────
 
-    matches = re.findall(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})', raw_text)
-    if not matches:
-        return None
-    m = matches[-1]
-    num = f'{fix_digits(m[1])}/{fix_digits(m[2])}'
-    print(f'[identify] OCR matched (corrected): {num!r}')
-    return num
+_NUMBER_RE = re.compile(r'([A-Za-z]{0,5})\s*(\d{1,4})\s*/\s*(\d{1,4})')
 
-def ocr_card_number(img: Image.Image) -> str | None:
+def _fix_digits(s: str) -> str:
+    """Correct common OCR digit confusions."""
+    return (s.replace('O', '0').replace('o', '0')
+             .replace('l', '1').replace('I', '1')
+             .replace('B', '8').replace('S', '5')
+             .replace('Z', '2').replace('z', '2'))
+
+def ocr_card_number(img: Image.Image) -> tuple[str | None, int | None]:
     """
-    Two-pass OCR:
-    1. Full bottom-40% scan to find approximate number location
-    2. Zoom into the number region and re-OCR with digits-only for accuracy
+    Return (card_number, set_total) e.g. ('181', 198), or (None, None).
+    Two-pass: broad scan to find the region, then zoom with digits-only whitelist.
     """
     if not TESSERACT_OK:
-        return None
+        return None, None
 
-    # Pass 1: try bottom 50% with PSM 6, then PSM 11 if nothing found
     w, h = img.size
     bottom = img.crop((0, int(h * 0.50), w, h))
-    processed = preprocess_for_ocr(bottom)
+    proc = _preprocess(bottom)
 
-    raw = pytesseract.image_to_string(processed, config='--oem 1 --psm 6')
-    print(f'[identify] OCR pass1 raw: {raw!r}')
+    # Pass 1 — find approximate location with PSM 6, fallback PSM 11
+    raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 6')
+    if not _NUMBER_RE.search(raw):
+        raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 11')
+    print(f'[identify] OCR pass1: {raw.strip()!r}')
 
-    # If PSM 6 found nothing, try PSM 11 (sparse — finds any text anywhere)
-    if not re.search(r'\d{2,4}\s*/\s*\d{2,4}', raw):
-        raw2 = pytesseract.image_to_string(processed, config='--oem 1 --psm 11')
-        print(f'[identify] OCR pass1 psm11 raw: {raw2!r}')
-        if re.search(r'\d{2,4}\s*/\s*\d{2,4}', raw2):
-            raw = raw2
-
-    # Pass 2: find the slash-number substring, re-OCR it with digits-only whitelist
-    # Extract bounding boxes for digit clusters near a slash
+    # Pass 2 — zoom into the slash-token region with digits-only whitelist
     try:
-        data = pytesseract.image_to_data(processed, config='--oem 1 --psm 6', output_type=pytesseract.Output.DICT)
-        texts = data['text']
-        # Find index of a token containing '/'
-        slash_idx = next((i for i, t in enumerate(texts) if '/' in t and re.search(r'\d', t)), None)
+        data = pytesseract.image_to_data(proc, config='--oem 1 --psm 6',
+                                         output_type=pytesseract.Output.DICT)
+        slash_idx = next(
+            (i for i, t in enumerate(data['text']) if '/' in t and re.search(r'\d', t)),
+            None
+        )
         if slash_idx is not None:
-            # Grab surrounding tokens too
-            x1 = min(data['left'][max(0, slash_idx-1):slash_idx+2])
-            y1 = min(data['top'][max(0, slash_idx-1):slash_idx+2])
-            x2 = max(data['left'][i] + data['width'][i] for i in range(max(0, slash_idx-1), min(len(texts), slash_idx+2)))
-            y2 = max(data['top'][i] + data['height'][i] for i in range(max(0, slash_idx-1), min(len(texts), slash_idx+2)))
-            pad = 10
-            region = processed.crop((max(0, x1-pad), max(0, y1-pad), x2+pad, y2+pad))
+            idxs = range(max(0, slash_idx - 1), min(len(data['text']), slash_idx + 2))
+            x1 = min(data['left'][i] for i in idxs)
+            y1 = min(data['top'][i] for i in idxs)
+            x2 = max(data['left'][i] + data['width'][i] for i in idxs)
+            y2 = max(data['top'][i] + data['height'][i] for i in idxs)
+            pad = 12
+            region = proc.crop((max(0, x1 - pad), max(0, y1 - pad), x2 + pad, y2 + pad))
             region = region.resize((region.width * 3, region.height * 3), Image.LANCZOS)
-            raw2 = pytesseract.image_to_string(
+            zoomed = pytesseract.image_to_string(
                 region,
                 config='--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789/'
             ).strip()
-            print(f'[identify] OCR pass2 zoom raw: {raw2!r}')
-            m2 = re.search(r'(\d{1,4})/(\d{1,4})', raw2)
+            print(f'[identify] OCR pass2 zoom: {zoomed!r}')
+            m2 = re.search(r'(\d{1,4})/(\d{1,4})', zoomed)
             if m2:
-                num = f'{m2.group(1)}/{m2.group(2)}'
-                print(f'[identify] OCR result (zoom): {num!r}')
-                return num
+                return m2.group(1).lstrip('0') or '0', int(m2.group(2))
     except Exception as e:
-        print(f'[identify] OCR pass2 failed: {e}')
+        print(f'[identify] OCR pass2 error: {e}')
 
-    # Fallback: use pass1 result with digit correction
-    return _ocr_zoom_number(img, raw)
+    # Fallback — use pass1 raw with digit correction
+    m = _NUMBER_RE.search(raw)
+    if m:
+        num = _fix_digits(m.group(2)).lstrip('0') or '0'
+        total = int(_fix_digits(m.group(3))) if m.group(3).isdigit() else None
+        return num, total
 
-# ── PokéTCG API ──────────────────────────────────────────────────────────────
+    return None, None
 
-import ssl
-import http.client
-import urllib.parse
-import json as _json
 
-def _api_get(path, params=None, retries=2):
-    """HTTP/1.1 only via stdlib http.client — avoids H2 ALPN stall on Pi."""
-    url_path = f'/v2/{path}'
-    if params:
-        url_path += '?' + urllib.parse.urlencode(params)
-    hdrs = {'X-Api-Key': API_KEY} if API_KEY else {}
-    last_err = None
-    for attempt in range(retries + 1):
-        try:
-            ctx = ssl.create_default_context()
-            ctx.set_alpn_protocols(['http/1.1'])  # prevent H2 negotiation stall
-            conn = http.client.HTTPSConnection('api.pokemontcg.io', context=ctx, timeout=15)
-            conn.request('GET', url_path, headers=hdrs)
-            resp = conn.getresponse()
-            data = _json.loads(resp.read().decode())
-            conn.close()
-            return data
-        except Exception as e:
-            last_err = e
-            if attempt < retries:
-                print(f'[identify] API attempt {attempt+1} failed, retrying... ({e})')
-                time.sleep(1)
-    raise last_err
+def ocr_card_name(img: Image.Image) -> str | None:
+    """Try to read the card name from the top portion of the image."""
+    if not TESSERACT_OK:
+        return None
+    w, h = img.size
+    top = img.crop((0, 0, w, int(h * 0.15)))
+    proc = _preprocess(top)
+    raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 7').strip()
+    # Filter obvious garbage (too short, all symbols)
+    if len(raw) >= 3 and re.search(r'[A-Za-z]', raw):
+        return raw
+    return None
 
-def _local_search(card_number: str) -> list[dict]:
-    """Search the local cards.db for this card number."""
+# ── Local DB lookup ───────────────────────────────────────────────────────────
+
+def _db_search(number: str, set_total: int | None = None) -> list[dict]:
+    """Query cards.db by card number (and optionally set total)."""
     if not os.path.exists(CARDS_DB):
+        print('[identify] cards.db not found — run scripts/build_card_db.py')
         return []
-    import sqlite3 as _sqlite3
-    num_part = card_number.split('/')[0].lstrip('0') or '0'
-    num_clean = re.sub(r'^[A-Za-z]+', '', num_part).lstrip('0') or '0'
     try:
-        conn = _sqlite3.connect(CARDS_DB)
-        conn.row_factory = _sqlite3.Row
-        rows = conn.execute(
-            'SELECT * FROM cards WHERE CAST(LTRIM(number, "0") AS TEXT) = ? LIMIT 30',
-            (num_clean,)
-        ).fetchall()
+        conn = sqlite3.connect(CARDS_DB)
+        conn.row_factory = sqlite3.Row
+        if set_total:
+            rows = conn.execute(
+                '''SELECT * FROM cards
+                   WHERE CAST(LTRIM(number, "0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
+                   AND set_total = ?
+                   LIMIT 10''',
+                (number, set_total)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                '''SELECT * FROM cards
+                   WHERE CAST(LTRIM(number, "0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") AS TEXT) = ?
+                   LIMIT 20''',
+                (number,)
+            ).fetchall()
         conn.close()
-        # Convert to API-compatible dict format
-        result = []
-        for r in rows:
-            result.append({
-                'id': r['id'],
-                'name': r['name'],
-                'number': r['number'],
-                'set': {'id': r['set_id'], 'name': r['set_name'], 'total': r['set_total']},
-                'rarity': r['rarity'],
-                'supertype': r['supertype'],
-                'images': {'small': r['image_small'], 'large': r['image_large']},
-                'tcgplayer': {'prices': {'normal': {'market': r['price_market']}}} if r['price_market'] else {},
-            })
-        print(f'[identify] Local DB: {len(result)} candidates for number {num_clean!r}')
-        return result
+        return [dict(r) for r in rows]
     except Exception as e:
-        print(f'[identify] Local DB error: {e}')
+        print(f'[identify] DB error: {e}')
         return []
 
 
-def search_by_number(card_number: str) -> list[dict]:
-    """Search local DB first, fall back to API."""
-    # Try local DB first
-    candidates = _local_search(card_number)
-    if candidates:
-        return candidates
-
-    # Fall back to API
-    num_part = card_number.split('/')[0].lstrip('0') or '0'
-    num_clean = re.sub(r'^[A-Z]+', '', num_part).lstrip('0') or '0'
-    try:
-        data = _api_get('cards', {'q': f'number:{num_clean}', 'pageSize': 20})
-        return data.get('data', [])
-    except Exception as e:
-        print(f'[identify] API error: {e}')
-        return []
-
-def best_card_match(candidates: list[dict], img: Image.Image) -> tuple[dict | None, float]:
+def _pick_best(candidates: list[dict], ocr_name: str | None) -> tuple[dict | None, float]:
     """
-    Pick best match from API candidates using perceptual hash comparison
-    against the card's API image. Returns (card, confidence 0-1).
+    Pick the best candidate. If we have an OCR name, score by name similarity.
+    Otherwise pick the one from the most recent set (highest set_id alphabetically).
     """
     if not candidates:
         return None, 0.0
     if len(candidates) == 1:
-        return candidates[0], 0.85
+        return candidates[0], 0.88
 
-    scan_hash = imagehash.phash(img)
-    best, best_score = None, float('inf')
-    for card in candidates:
-        img_url = card.get('images', {}).get('small')
-        if not img_url:
-            continue
-        cached = _cached_hash(card['id'])
-        if cached is None:
-            try:
-                resp = requests.get(img_url, timeout=8)
-                ref_img = Image.open(__import__('io').BytesIO(resp.content))
-                cached = imagehash.phash(ref_img)
-                _store_hash(card['id'], str(cached))
-            except Exception:
-                continue
-        diff = scan_hash - cached
-        if diff < best_score:
-            best_score, best = diff, card
+    if ocr_name:
+        ocr_lower = ocr_name.lower()
+        def name_score(c):
+            name = (c.get('name') or '').lower()
+            # Simple overlap score
+            matches = sum(1 for w in name.split() if w in ocr_lower or ocr_lower in w)
+            return matches
+        ranked = sorted(candidates, key=name_score, reverse=True)
+        best = ranked[0]
+        score = name_score(best)
+        confidence = min(0.92, 0.70 + score * 0.08) if score > 0 else 0.65
+        return best, confidence
 
-    # phash diff: 0 = identical, >15 = probably wrong card
-    confidence = max(0.0, 1.0 - (best_score / 20.0))
-    return best, confidence
+    # No name — prefer most recent set (sort by set_id desc as proxy for recency)
+    ranked = sorted(candidates, key=lambda c: c.get('set_id') or '', reverse=True)
+    return ranked[0], 0.70
 
-def _cached_hash(tcg_id: str):
-    path = os.path.join(CACHE_DIR, f'{tcg_id}.hash')
-    if os.path.exists(path):
-        with open(path) as f:
-            return imagehash.hex_to_hash(f.read().strip())
-    return None
-
-def _store_hash(tcg_id: str, h: str):
-    with open(os.path.join(CACHE_DIR, f'{tcg_id}.hash'), 'w') as f:
-        f.write(h)
-
-# ── Main entry point ─────────────────────────────────────────────────────────
+# ── Main entry point ──────────────────────────────────────────────────────────
 
 def identify_card(img: Image.Image) -> dict:
     """
-    Given a PIL Image of a card, return identification dict:
-    {
-        tcg_id, name, set_name, set_code, card_number, rarity,
-        supertype, image_url, tcgplayer_price,
-        identified_by, confidence, needs_review
-    }
+    Given a PIL Image of a card, return identification dict.
+    Queries local cards.db — no network calls.
     """
     result = {
         'tcg_id': None, 'name': 'Unknown', 'set_name': None, 'set_code': None,
@@ -265,59 +182,50 @@ def identify_card(img: Image.Image) -> dict:
         'identified_by': 'failed', 'confidence': 0.0, 'needs_review': 1,
     }
 
-    # Step 1: OCR the card number
-    card_number = ocr_card_number(img)
-    print(f'[identify] OCR result: {card_number!r}')
+    # Step 1: OCR card number
+    number, set_total = ocr_card_number(img)
+    print(f'[identify] OCR result: number={number!r} set_total={set_total!r}')
 
-    candidates = []
-    if card_number:
-        result['card_number'] = card_number
-        candidates = search_by_number(card_number)
-
-    # Step 1b: narrow candidates by set total (the second number, e.g. 198 in 181/198)
-    if card_number and '/' in card_number:
-        try:
-            set_total = int(card_number.split('/')[1])
-            filtered = [c for c in candidates if c.get('set', {}).get('total') == set_total]
-            if filtered:
-                print(f'[identify] Filtered to {len(filtered)} candidates by set total={set_total}')
-                candidates = filtered
-        except (ValueError, IndexError):
-            pass
-
-    # Step 2: Pick best match (hash comparison if multiple, direct if only one)
-    if len(candidates) == 1:
-        card, confidence = candidates[0], 0.88
-    else:
-        card, confidence = best_card_match(candidates, img)
-
-    if card and confidence >= 0.5:
-        prices = card.get('tcgplayer', {}).get('prices', {})
-        # Try to get market price from any available price category
-        price = None
-        for cat in ['holofoil', 'reverseHolofoil', 'normal', '1stEditionHolofoil']:
-            p = prices.get(cat, {}).get('market')
-            if p:
-                price = p
-                break
-
-        result.update({
-            'tcg_id':         card['id'],
-            'name':           card.get('name', 'Unknown'),
-            'set_name':       card.get('set', {}).get('name'),
-            'set_code':       card.get('set', {}).get('id'),
-            'card_number':    card.get('number', card_number),
-            'rarity':         card.get('rarity'),
-            'supertype':      card.get('supertype'),
-            'image_url':      card.get('images', {}).get('small'),
-            'tcgplayer_price': price,
-            'identified_by':  'ocr' if card_number else 'image_hash',
-            'confidence':     round(confidence, 3),
-            'needs_review':   0 if confidence >= 0.75 else 1,
-        })
-    else:
-        # Flag for manual review
-        result['needs_review'] = 1
+    if not number:
         result['identified_by'] = 'failed'
+        return result
+
+    result['card_number'] = f'{number}/{set_total}' if set_total else number
+
+    # Step 2: DB lookup
+    candidates = _db_search(number, set_total)
+    print(f'[identify] DB candidates: {len(candidates)}')
+
+    if not candidates and set_total:
+        # Retry without set_total constraint
+        candidates = _db_search(number)
+        print(f'[identify] DB retry (no set filter): {len(candidates)} candidates')
+
+    if not candidates:
+        result['identified_by'] = 'failed'
+        return result
+
+    # Step 3: OCR name for disambiguation
+    ocr_name = ocr_card_name(img)
+    print(f'[identify] OCR name: {ocr_name!r}')
+
+    # Step 4: Pick best candidate
+    card, confidence = _pick_best(candidates, ocr_name)
+
+    if card:
+        result.update({
+            'tcg_id':          card['id'],
+            'name':            card['name'],
+            'set_name':        card['set_name'],
+            'set_code':        card['set_id'],
+            'card_number':     card['number'],
+            'rarity':          card['rarity'],
+            'supertype':       card['supertype'],
+            'image_url':       card['image_small'],
+            'tcgplayer_price': card['price_market'],
+            'identified_by':   'local_db',
+            'confidence':      round(confidence, 3),
+            'needs_review':    0 if confidence >= 0.75 else 1,
+        })
 
     return result
