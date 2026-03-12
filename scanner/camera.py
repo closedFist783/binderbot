@@ -32,10 +32,18 @@ def init_camera():
         time.sleep(2)  # warm-up
         print('[camera] Pi camera initialised')
     elif _USE_CV2:
-        _cv2_cap = cv2.VideoCapture(0)
-        _cv2_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        _cv2_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        print('[camera] OpenCV camera initialised')
+        # Try each video device index with explicit V4L2 backend
+        for idx in range(4):
+            cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+                _cv2_cap = cap
+                print(f'[camera] OpenCV camera initialised (V4L2 /dev/video{idx})')
+                break
+            cap.release()
+        if _cv2_cap is None:
+            print('[camera] No OpenCV camera found — will use test images')
     else:
         print('[camera] No camera found — will use test images')
 
