@@ -240,6 +240,27 @@ def _name_score(candidate_name: str, ocr_name: str) -> float:
     return 0.0
 
 
+# Lower index = more common/preferred rarity
+_RARITY_RANK = {
+    'energy':          0,
+    'common':          1,
+    'uncommon':        2,
+    'rare':            3,
+    'rare holo':       4,
+    'rare holo v':     5,
+    'rare ultra':      6,
+    'rare rainbow':    7,
+    'rare secret':     8,
+    'hyper rare':      9,
+    'special illustration rare': 10,
+    'illustration rare': 7,
+}
+
+def _rarity_rank(card: dict) -> int:
+    r = (card.get('rarity') or '').lower()
+    return _RARITY_RANK.get(r, 5)  # unknown rarity = mid-tier
+
+
 def pick_best(candidates: list[dict], ocr_name: str | None) -> tuple[dict | None, float]:
     if not candidates:
         return None, 0.0
@@ -249,13 +270,14 @@ def pick_best(candidates: list[dict], ocr_name: str | None) -> tuple[dict | None
 
     if ocr_name:
         scored = [(c, _name_score(c['name'], ocr_name)) for c in candidates]
-        scored.sort(key=lambda x: x[1], reverse=True)
+        # Sort by name score desc, then rarity rank asc (prefer common over hyper rare)
+        scored.sort(key=lambda x: (-x[1], _rarity_rank(x[0])))
         best, score = scored[0]
         confidence = min(0.95, 0.60 + score * 0.35)
         return best, confidence
 
-    # No name — prefer most recent set
-    ranked = sorted(candidates, key=lambda c: c.get('set_id') or '', reverse=True)
+    # No name — prefer common rarity, then most recent set
+    ranked = sorted(candidates, key=lambda c: (_rarity_rank(c), -(ord(c.get('set_id', ' ')[0]) if c.get('set_id') else 0)))
     return ranked[0], 0.60
 
 # ── Main entry point ──────────────────────────────────────────────────────────
