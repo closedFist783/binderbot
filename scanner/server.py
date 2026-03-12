@@ -137,9 +137,10 @@ def preview():
 def preview_ocr():
     """Return the preprocessed OCR image — shows exactly what Tesseract sees."""
     from flask import Response
-    from identify import preprocess_for_ocr
+    from identify import _preprocess
     img = capture()
-    processed = preprocess_for_ocr(img)
+    w, h = img.size
+    processed = _preprocess(img.crop((0, int(h * 0.50), w, h)))
     buf = io.BytesIO()
     processed.save(buf, 'JPEG', quality=90)
     buf.seek(0)

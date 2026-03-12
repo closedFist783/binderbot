@@ -20,12 +20,12 @@ CARDS_DB = os.path.join(os.path.dirname(__file__), '..', 'cards.db')
 
 # ── Image preprocessing ───────────────────────────────────────────────────────
 
-def _preprocess(img: Image.Image) -> Image.Image:
+def _preprocess(img: Image.Image, threshold: int = 140) -> Image.Image:
     """Greyscale → autocontrast → sharpen → binary threshold → 2× scale."""
     img = img.convert('L')
     img = PIL.ImageOps.autocontrast(img, cutoff=2)
     img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
-    img = img.point(lambda x: 0 if x < 160 else 255)
+    img = img.point(lambda x: 0 if x < threshold else 255)
     img = img.resize((img.width * 2, img.height * 2), Image.LANCZOS)
     return img
 
@@ -52,11 +52,23 @@ def ocr_card_number(img: Image.Image) -> tuple[str | None, int | None]:
     bottom = img.crop((0, int(h * 0.50), w, h))
     proc = _preprocess(bottom)
 
-    # Pass 1 — find approximate location with PSM 6, fallback PSM 11
-    raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 6')
-    if not _NUMBER_RE.search(raw):
-        raw = pytesseract.image_to_string(proc, config='--oem 1 --psm 11')
-    print(f'[identify] OCR pass1: {raw.strip()!r}')
+    # Pass 1 — try multiple thresholds and PSM modes until we find a number
+    raw = ''
+    for thresh in (140, 110, 170):
+        proc = _preprocess(bottom, threshold=thresh)
+        for psm in (6, 11):
+            candidate = pytesseract.image_to_string(proc, config=f'--oem 1 --psm {psm}')
+            if _NUMBER_RE.search(candidate):
+                raw = candidate
+                print(f'[identify] OCR pass1 hit (thresh={thresh} psm={psm}): {candidate.strip()!r}')
+                break
+        if raw:
+            break
+    if not raw:
+        # Last resort: use the last attempt
+        print(f'[identify] OCR pass1 no match found')
+    else:
+        print(f'[identify] OCR pass1: {raw.strip()!r}')
 
     # Pass 2 — zoom into the slash-token region with digits-only whitelist
     try:
