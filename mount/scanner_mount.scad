@@ -71,8 +71,8 @@ module cradle() {
         // Camera body bottom edge rests on this, mount passes below
         translate([cradle_wall, cam_d, 0])
             cube([cam_w, cam_gap, cradle_wall]);
-        // Front lower lip — hangs below the shelf, cam_h tall, holds mount from front
-        translate([cradle_wall, cam_d, -cam_h])
+        // Front lower wall — same plane and side as U walls, extends upward cam_h tall
+        translate([cradle_wall, cam_d, 0])
             cube([cam_w, cradle_wall, cam_h]);
     }
 }
