@@ -22,6 +22,7 @@ shelf_margin  = 5;     // shelf overhang past posts
 cam_w         = 79;    // inner cradle width (76.4 + 2.6mm clearance)
 cam_d         = 23;    // inner cradle depth
 cam_h         = 30;    // interior height — fully encloses camera body (~29mm tall)
+cam_gap       = 5.23;  // gap between camera body bottom and mount top (50.35 - 28.96 - 16.16)
 cradle_wall   = 3;     // wall thickness
 
 // Lens view hole through shelf (centered)
@@ -66,10 +67,13 @@ module cradle() {
         // Right wall
         translate([cam_w + cradle_wall, 0, 0])
             cube([cradle_wall, cam_d + cradle_wall, cam_h]);
-        // Front bottom lip — same plane as U walls, holds camera bottom edge in
-        // Camera drops in from the top, bottom edge rests on this lip
+        // Front upper lip — fits in the gap between camera body and mount (cam_gap wide)
+        // Camera body bottom edge rests on this, mount passes below
         translate([cradle_wall, cam_d, 0])
-            cube([cam_w, cradle_wall, cradle_wall]);
+            cube([cam_w, cam_gap, cradle_wall]);
+        // Front lower lip — hangs below the shelf, cam_h tall, holds mount from front
+        translate([cradle_wall, cam_d, -cam_h])
+            cube([cam_w, cradle_wall, cam_h]);
     }
 }
 
