@@ -21,7 +21,7 @@ shelf_margin  = 5;     // shelf overhang past posts
 // Body is 76.4mm wide, 21.07mm deep, ~29mm tall — add ~2mm clearance each side
 cam_w         = 79;    // inner cradle width (76.4 + 2.6mm clearance)
 cam_d         = 23;    // inner cradle depth
-cam_h         = 20;    // cradle wall height — grips body without blocking lens
+cam_h         = 30;    // interior height — fully encloses camera body (~29mm tall)
 cradle_wall   = 3;     // wall thickness
 
 // Lens view hole through shelf (centered)
@@ -66,6 +66,9 @@ module cradle() {
         // Right wall
         translate([cam_w + cradle_wall, 0, 0])
             cube([cradle_wall, cam_d + cradle_wall, cam_h]);
+        // Top wall — closes the box, camera squeezed in on all sides
+        translate([0, 0, cam_h])
+            cube([cam_w + 2 * cradle_wall, cam_d + cradle_wall, cradle_wall]);
     }
 }
 
