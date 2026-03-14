@@ -23,6 +23,7 @@ cam_w         = 79;    // inner cradle width (76.4 + 2.6mm clearance)
 cam_d         = 23;    // inner cradle depth
 cam_h         = 30;    // interior height — fully encloses camera body (~29mm tall)
 cam_gap       = 5.23;  // gap between camera body bottom and mount top (50.35 - 28.96 - 16.16)
+cam_front_h   = 58;    // full height of front retention wall — spans whole camera body
 cradle_wall   = 3;     // wall thickness
 
 // Lens view hole through shelf (centered)
@@ -71,9 +72,9 @@ module cradle() {
         // Camera body bottom edge rests on this, mount passes below
         translate([cradle_wall, cam_d, 0])
             cube([cam_w, cam_gap, cradle_wall]);
-        // Front lower wall — same plane and side as U walls, extends upward cam_h tall
+        // Front lower wall — same plane and side as U walls, 58mm tall to span whole camera
         translate([cradle_wall, cam_d, 0])
-            cube([cam_w, cradle_wall, cam_h]);
+            cube([cam_w, cradle_wall, cam_front_h]);
     }
 }
 
