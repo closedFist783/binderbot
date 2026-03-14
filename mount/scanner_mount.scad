@@ -6,7 +6,7 @@
 // ── Tunables ──────────────────────────────────────────────────────────────────
 card_w        = 63;    // Pokemon card width (mm)
 card_h        = 88;    // Pokemon card height (mm)
-card_recess   = 1.5;   // depth of card guide recess in base
+card_recess   = 1.5;   // depth of card guide channel in base
 
 base_margin   = 10;    // extra base around card on each side
 base_thick    = 4;     // base plate thickness
@@ -33,9 +33,11 @@ shelf_d = base_d + shelf_margin * 2;
 module base_plate() {
     difference() {
         cube([base_w, base_d, base_thick]);
-        // Card guide recess (centered)
-        translate([(base_w - card_w) / 2, (base_d - card_h) / 2, base_thick - card_recess])
-            cube([card_w, card_h, card_recess + 0.1]);
+        // Card guide channel — open on front (Y=0) so cards slide in/out easily.
+        // Left + right walls and back wall remain as guides; front is open.
+        // Channel runs from Y=0 to the back of the card position (back wall = card stop).
+        translate([(base_w - card_w) / 2, -0.1, base_thick - card_recess])
+            cube([card_w, (base_d - card_h) / 2 + card_h + 0.1, card_recess + 0.1]);
     }
 }
 
