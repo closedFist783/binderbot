@@ -56,13 +56,7 @@ module top_shelf() {
         // Camera clip slot (centered)
         translate([(shelf_w - clip_slot_w) / 2, (shelf_d - clip_slot_d) / 2, -0.1])
             cube([clip_slot_w, clip_slot_d, clip_slot_h]);
-        // Corner notches so shelf clears posts cleanly
-        // Oversized by 0.2mm on each inner edge to avoid coplanar z-fighting artifacts
-        e = 0.2;
-        translate([0, 0, -0.1])                                        cube([shelf_margin + post_w + e, shelf_margin + post_w + e, shelf_thick + 0.2]);
-        translate([shelf_w - shelf_margin - post_w - e, 0, -0.1])      cube([shelf_margin + post_w + e, shelf_margin + post_w + e, shelf_thick + 0.2]);
-        translate([0, shelf_d - shelf_margin - post_w - e, -0.1])      cube([shelf_margin + post_w + e, shelf_margin + post_w + e, shelf_thick + 0.2]);
-        translate([shelf_w - shelf_margin - post_w - e, shelf_d - shelf_margin - post_w - e, -0.1]) cube([shelf_margin + post_w + e, shelf_margin + post_w + e, shelf_thick + 0.2]);
+
     }
 }
 
