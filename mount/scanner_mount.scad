@@ -66,9 +66,10 @@ module cradle() {
         // Right wall
         translate([cam_w + cradle_wall, 0, 0])
             cube([cradle_wall, cam_d + cradle_wall, cam_h]);
-        // Top wall — closes the box, camera squeezed in on all sides
-        translate([0, 0, cam_h])
-            cube([cam_w + 2 * cradle_wall, cam_d + cradle_wall, cradle_wall]);
+        // Front bottom lip — same plane as U walls, holds camera bottom edge in
+        // Camera drops in from the top, bottom edge rests on this lip
+        translate([cradle_wall, cam_d, 0])
+            cube([cam_w, cradle_wall, cradle_wall]);
     }
 }
 
