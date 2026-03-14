@@ -18,8 +18,8 @@ shelf_thick   = 5;     // top shelf thickness
 shelf_margin  = 5;     // shelf overhang past posts
 
 // Camera cradle (NexiGo N930AF body)
-// Body is 55.65mm wide, 21.07mm deep, ~29mm tall — add ~2mm clearance each side
-cam_w         = 58;    // inner cradle width
+// Body is 76.4mm wide, 21.07mm deep, ~29mm tall — add ~2mm clearance each side
+cam_w         = 79;    // inner cradle width (76.4 + 2.6mm clearance)
 cam_d         = 23;    // inner cradle depth
 cam_h         = 20;    // cradle wall height — grips body without blocking lens
 cradle_wall   = 3;     // wall thickness
