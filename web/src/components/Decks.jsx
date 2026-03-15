@@ -138,7 +138,11 @@ const CORE_CARDS = {
       { name: 'Rare Candy',           set_code: '',    number: '',    qty: 4 },
       { name: 'Ultra Ball',           set_code: '',    number: '',    qty: 4 },
     ],
-    fillers: ['Energy accelerators', 'Choice Belt', 'Jet Energy', 'supporters'],
+    recommended: [
+      { group: 'Energy Acceleration', cards: ['Jet Energy (PAL 190)', 'Double Turbo Energy (BRS 151)', 'Aurora Energy (SSH 186)'] },
+      { group: 'Items', cards: ['Choice Belt (PAL 176)', 'Lost Vacuum (LOR 162)', 'Nest Ball (SVI 181)'] },
+      { group: 'Supporters', cards: ["Boss's Orders (PAL 172)", 'Iono (PAL 185)', "Professor's Research (PAL 189)", 'Serena (SIT 164)'] },
+    ],
   },
   'Lost Zone Box': {
     core: [
@@ -148,7 +152,11 @@ const CORE_CARDS = {
       { name: 'Mirage Gate',          set_code: 'LOR', number: '163', qty: 4 },
       { name: 'Escape Rope',          set_code: '',    number: '',    qty: 4 },
     ],
-    fillers: ['Sableye LOR', 'Path to the Peak', 'Radiant Greninja', 'attackers of choice'],
+    recommended: [
+      { group: 'Attackers', cards: ['Sableye (LOR 70)', 'Radiant Greninja (ASR 46)', 'Kyogre (CRE 36)', 'Cramorant (extra copies)'] },
+      { group: 'Disruption', cards: ['Path to the Peak (CRE 148)', 'Lost City (LOR 161)', 'Spiritomb (PAL 89)'] },
+      { group: 'Supporters', cards: ['Iono (PAL 185)', "Boss's Orders (PAL 172)", 'Klara (CRE 145)'] },
+    ],
   },
   'Giratina VSTAR': {
     core: [
@@ -158,7 +166,11 @@ const CORE_CARDS = {
       { name: 'Lost City',            set_code: 'LOR', number: '161', qty: 2 },
       { name: "Colress's Experiment", set_code: 'LOR', number: '155', qty: 4 },
     ],
-    fillers: ['Radiant Charizard', 'Sableye LOR', 'Pal Pad', 'supporters'],
+    recommended: [
+      { group: 'Attackers', cards: ['Radiant Charizard (PGO 11)', 'Sableye (LOR 70)', 'Cramorant (LOR 50)'] },
+      { group: 'Recovery', cards: ['Pal Pad (SVI 182)', 'Klara (CRE 145)', 'Night Stretcher (SFA 61)'] },
+      { group: 'Supporters', cards: ['Iono (PAL 185)', "Boss's Orders (PAL 172)", 'Serena (SIT 164)'] },
+    ],
   },
   'Regidrago VSTAR': {
     core: [
@@ -168,7 +180,11 @@ const CORE_CARDS = {
       { name: "Dragon's Call",        set_code: 'SIT', number: '155', qty: 4 },
       { name: 'Ultra Ball',           set_code: '',    number: '',    qty: 4 },
     ],
-    fillers: ['Dragon energy attachments', 'various dragon Pokémon for copying', 'Snorlax', 'Cresselia'],
+    recommended: [
+      { group: 'Dragon Pokémon (copy targets)', cards: ['Duraludon VMAX (EVS 122)', 'Kyurem VMAX (BRS 51)', 'Rayquaza VMAX (EVS 111)', 'Goodra VSTAR (LOR 136)'] },
+      { group: 'Utility', cards: ['Cresselia (LOR 74)', 'Snorlax (PGO 55)', 'Radiant Alakazam (SIT 59)'] },
+      { group: 'Energy', cards: ['Powerful Colorless Energy (DAA 176)', 'Speed Lightning Energy (RCL 173)', 'Horror Psychic Energy (RCH 172)'] },
+    ],
   },
   'Palkia VSTAR': {
     core: [
@@ -178,7 +194,11 @@ const CORE_CARDS = {
       { name: 'Drizzile',             set_code: 'SHF', number: '99',  qty: 3 },
       { name: 'Irida',                set_code: 'ASR', number: '147', qty: 4 },
     ],
-    fillers: ['Inteleon CRE', 'Choice Belt', 'Cross Switcher', 'energy'],
+    recommended: [
+      { group: 'Evolution Line', cards: ['Inteleon (CRE 43)', 'extra Drizzile (SHF 99)'] },
+      { group: 'Items', cards: ['Choice Belt (PAL 176)', 'Cross Switcher (FST 230)', 'Capacious Bucket (RCL 156)', 'Escape Rope (BST 125)'] },
+      { group: 'Supporters', cards: ['Iono (PAL 185)', "Boss's Orders (PAL 172)", 'Melony (CRE 146)'] },
+    ],
   },
   'Chien-Pao Baxcalibur': {
     core: [
@@ -188,7 +208,11 @@ const CORE_CARDS = {
       { name: 'Irida',                set_code: '',    number: '',    qty: 3 },
       { name: 'Ultra Ball',           set_code: '',    number: '',    qty: 4 },
     ],
-    fillers: ["Boss's Orders", 'Iono', 'Path to the Peak', 'Water energy', 'Artazon'],
+    recommended: [
+      { group: 'Disruption', cards: ["Boss's Orders (PAL 172)", 'Iono (PAL 185)', 'Path to the Peak (CRE 148)', 'Counter Catcher (PAR 160)'] },
+      { group: 'Items', cards: ['Artazon (PAL 171)', 'Earthen Vessel (PAR 163)', 'Nest Ball (SVI 181)'] },
+      { group: 'Energy & Tech', cards: ['Reversal Energy (PAL 192)', 'Water Energy', 'Radiant Greninja (ASR 46)'] },
+    ],
   },
   'Roaring Moon ex': {
     core: [
@@ -198,7 +222,11 @@ const CORE_CARDS = {
       { name: 'Dark Patch',           set_code: 'ASR', number: '139', qty: 4 },
       { name: "Colress's Experiment", set_code: 'LOR', number: '155', qty: 4 },
     ],
-    fillers: ['Counter Catcher', 'Iono', "Boss's Orders", 'Dark energy', 'Nest Ball'],
+    recommended: [
+      { group: 'Disruption', cards: ['Counter Catcher (PAR 160)', 'Iono (PAL 185)', "Boss's Orders (PAL 172)"] },
+      { group: 'Items', cards: ['Nest Ball (SVI 181)', 'Night Stretcher (SFA 61)', 'Escape Rope (BST 125)'] },
+      { group: 'Energy', cards: ['Dark Energy', 'Reversal Energy (PAL 192)', 'Basic Darkness Energy'] },
+    ],
   },
   'Terapagos ex': {
     core: [
@@ -208,7 +236,11 @@ const CORE_CARDS = {
       { name: 'Iono',                            set_code: '',    number: '',    qty: 4 },
       { name: 'Ultra Ball',                      set_code: '',    number: '',    qty: 4 },
     ],
-    fillers: ['Earthen Vessel', 'Arven', 'various Tera type Pokémon', 'energy'],
+    recommended: [
+      { group: 'Tera Pokémon', cards: ['Iron Treads ex (PAR 90)', 'Walking Wake ex (PAR 44)', 'Fezandipiti ex (SFA 38)', 'Flutter Mane (PAR 78)'] },
+      { group: 'Items', cards: ['Earthen Vessel (PAR 163)', 'Arven (SVI 166)', 'Nest Ball (SVI 181)'] },
+      { group: 'Supporters', cards: ["Boss's Orders (PAL 172)", 'Professor\'s Research (PAL 189)'] },
+    ],
   },
   'Garbodor Trashalanche': {
     core: [
@@ -218,7 +250,11 @@ const CORE_CARDS = {
       { name: 'Acerola',             set_code: 'BUS', number: '112', qty: 3 },
       { name: 'Float Stone',         set_code: '',    number: '',    qty: 4 },
     ],
-    fillers: ['N', 'Hex Maniac', 'Professor Sycamore', 'various support items'],
+    recommended: [
+      { group: 'Supporters', cards: ['N (FCO 105)', 'Hex Maniac (AOR 75)', 'Professor Sycamore (PHF 101)', 'Guzma (BUS 115)'] },
+      { group: 'Items', cards: ['VS Seeker (PHF 109)', 'Puzzle of Time (BKP 109)', 'Choice Band (GRI 121)'] },
+      { group: 'Disruption', cards: ['Enhanced Hammer (PHF 94)', 'Team Skull Grunt (SUM 133)', 'Trashalanche target items'] },
+    ],
   },
   'Decidueye GX': {
     core: [
@@ -228,7 +264,11 @@ const CORE_CARDS = {
       { name: 'Vileplume',           set_code: 'AOR', number: '3',   qty: 3 },
       { name: 'Alolan Exeggutor',    set_code: 'FLI', number: '2',   qty: 2 },
     ],
-    fillers: ['Level Ball', 'Revitalizer', 'Forest of Giant Plants', 'supporters'],
+    recommended: [
+      { group: 'Items', cards: ['Level Ball (BST 129)', 'Revitalizer (GEN 70)', 'Forest of Giant Plants (AOR 74)', 'Rescue Stretcher (GRI 130)'] },
+      { group: 'Supporters', cards: ['Lillie (SUM 122)', 'Brigette (BKT 134)', 'N (FCO 105)', 'Guzma (BUS 115)'] },
+      { group: 'Tech', cards: ['Tapu Lele GX (GRI 60)', 'Beedrill EX (XY 10)', 'Lugia EX (AOR 68)'] },
+    ],
   },
   'Zapdos TEU': {
     core: [
@@ -237,11 +277,15 @@ const CORE_CARDS = {
       { name: 'Escape Board',        set_code: 'UPR', number: '122', qty: 4 },
       { name: 'Thunder Mountain',    set_code: 'LOT', number: '191', qty: 4 },
     ],
-    fillers: ['Tapu Koko Prism Star', 'Electropower', 'Acro Bike', 'Lightning Energy'],
+    recommended: [
+      { group: 'Pokémon', cards: ['Tapu Koko Prism Star (TEU 51)', 'Zeraora GX (LOT 86)', 'Dedenne GX (UNB 57)', 'Marshadow (SHL 45)'] },
+      { group: 'Items', cards: ['Electropower (LOT 172)', 'Acro Bike (CES 123)', 'Pokégear 3.0 (UNB 182)'] },
+      { group: 'Supporters', cards: ['Volkner (UPR 135)', 'Guzma (BUS 115)', 'Lt. Surge\'s Strategy (UNB 178)'] },
+    ],
   },
 }
 
-const DEFAULT_CORE = { core: [], fillers: ['View full list on Limitless for recommended cards'] }
+const DEFAULT_CORE = { core: [], recommended: [{ group: 'Info', cards: ['View full list on Limitless for recommended cards'] }] }
 
 function getCoreCards(deckName) {
   return CORE_CARDS[deckName] || DEFAULT_CORE
@@ -577,78 +621,13 @@ export default function Decks() {
 
         {/* ── Recommended tab ── */}
         {detailTab === 'recommended' && (
-          <div>
-            {/* Deck complete note */}
-            {stats.pct === 100 && (
-              <div style={{ fontSize: '0.78rem', color: '#4caf50', marginBottom: 14,
-                padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)' }}>
-                ✅ Deck complete — here are popular tech swaps
-              </div>
-            )}
-
-            {metaDeck ? (
-              /* Has full decklist */
-              TECH_CARDS[d.metaId] ? (
-                <div>
-                  {TECH_CARDS[d.metaId].map((group, gi) => (
-                    <div key={gi} style={{ marginBottom: 16 }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 6 }}>
-                        {group.group.toUpperCase()}
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {group.cards.map((card, ci) => (
-                          <span key={ci} style={{
-                            padding: '3px 10px',
-                            borderRadius: 20,
-                            background: 'var(--surface2)',
-                            border: '1px solid var(--border)',
-                            fontSize: '0.75rem',
-                            color: 'var(--text)',
-                          }}>
-                            {card}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', padding: '12px 0' }}>
-                  Check{' '}
-                  <a href={limitlessUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--gold)' }}>
-                    Limitless
-                  </a>{' '}
-                  for popular tech choices in this archetype.
-                </div>
-              )
-            ) : (
-              /* Core cards only (null metaId) */
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 8 }}>
-                  COMMONLY PAIRED CARDS
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-                  {coreData.fillers.map((f, i) => (
-                    <span key={i} style={{
-                      padding: '3px 10px',
-                      borderRadius: 20,
-                      background: 'var(--surface2)',
-                      border: '1px solid var(--border)',
-                      fontSize: '0.75rem',
-                      color: 'var(--text)',
-                    }}>
-                      {f}
-                    </span>
-                  ))}
-                </div>
-                <a href={limitlessUrl} target="_blank" rel="noreferrer"
-                  style={{ color: 'var(--gold)', fontSize: '0.82rem', textDecoration: 'none' }}>
-                  View full list on Limitless ↗
-                </a>
-              </div>
-            )}
-          </div>
+          <RecommendedTab
+            metaDeck={metaDeck}
+            metaId={d.metaId}
+            coreData={coreData}
+            deckPct={stats.pct}
+            limitlessUrl={limitlessUrl}
+          />
         )}
       </div>
     )
@@ -788,6 +767,102 @@ function DeckRow({ deck, collection, collectionLoaded, metaDeck, onOpen }) {
 
         <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', flexShrink: 0 }}>▶</div>
       </div>
+    </div>
+  )
+}
+
+// ── Recommended tab ───────────────────────────────────────────────────────────
+
+function RecommendedTab({ metaDeck, metaId, coreData, deckPct, limitlessUrl }) {
+  const [expanded, setExpanded] = useState({})
+
+  function toggle(groupName) {
+    setExpanded(prev => ({ ...prev, [groupName]: !prev[groupName] }))
+  }
+
+  const groups = metaDeck
+    ? (TECH_CARDS[metaId] || null)
+    : (coreData.recommended || null)
+
+  const heading = metaDeck ? 'TECH OPTIONS & POPULAR SWAPS' : 'COMMONLY PAIRED CARDS'
+
+  return (
+    <div>
+      {deckPct === 100 && (
+        <div style={{ fontSize: '0.78rem', color: '#4caf50', marginBottom: 14,
+          padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)' }}>
+          ✅ Deck complete — here are popular tech swaps
+        </div>
+      )}
+
+      {groups ? (
+        <div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 12 }}>
+            Click a category to expand
+          </div>
+          {groups.map((group, gi) => {
+            const open = !!expanded[group.group]
+            return (
+              <div key={gi} style={{ marginBottom: 8 }}>
+                {/* Category header — clickable */}
+                <button
+                  onClick={() => toggle(group.group)}
+                  style={{
+                    width: '100%', textAlign: 'left', padding: '9px 14px',
+                    background: open ? 'rgba(201,168,76,0.1)' : 'var(--surface)',
+                    border: `1px solid ${open ? 'var(--gold-dim)' : 'var(--border)'}`,
+                    borderRadius: open ? '6px 6px 0 0' : 6,
+                    cursor: 'pointer', color: open ? 'var(--gold)' : 'var(--text)',
+                    fontSize: '0.82rem', fontWeight: 600,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                  <span>{group.group}</span>
+                  <span style={{ fontSize: '0.72rem', opacity: 0.6 }}>
+                    {group.cards.length} cards {open ? '▲' : '▼'}
+                  </span>
+                </button>
+
+                {/* Expanded card list */}
+                {open && (
+                  <div style={{
+                    border: '1px solid var(--gold-dim)', borderTop: 'none',
+                    borderRadius: '0 0 6px 6px', padding: '10px 14px',
+                    background: 'var(--surface)',
+                    display: 'flex', flexWrap: 'wrap', gap: 6,
+                  }}>
+                    {group.cards.map((card, ci) => (
+                      <span key={ci} style={{
+                        padding: '4px 12px', borderRadius: 20, fontSize: '0.78rem',
+                        background: 'var(--surface2)', border: '1px solid var(--border)',
+                        color: 'var(--text)',
+                      }}>
+                        {card}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          <div style={{ marginTop: 14, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+            These are commonly used options — check{' '}
+            <a href={limitlessUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--gold)' }}>
+              Limitless
+            </a>{' '}
+            for a complete optimized list.
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', padding: '12px 0' }}>
+          Check{' '}
+          <a href={limitlessUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--gold)' }}>
+            Limitless
+          </a>{' '}
+          for popular tech choices in this archetype.
+        </div>
+      )}
     </div>
   )
 }
