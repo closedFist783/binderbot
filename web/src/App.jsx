@@ -56,7 +56,7 @@ export default function App() {
         {tab === 'collection' && <Collection />}
         {tab === 'decks'      && <Decks      />}
         {tab === 'locate'     && <Locate     />}
-        {tab === 'stats'      && <Stats      status={status} />}
+        {tab === 'stats'      && <Stats />}
       </main>
     </div>
   )
