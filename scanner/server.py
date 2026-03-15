@@ -159,69 +159,57 @@ def add_card_manual():
             ids.append(pid)
     return jsonify({'ok': True, 'physical_ids': ids})
 
+def _tcg_curl(endpoint, params):
+    """Use system curl (macOS SecureTransport) — bypasses Cloudflare TLS fingerprinting."""
+    import subprocess
+    import urllib.parse
+    key = os.environ.get('TCG_API_KEY', '')
+    qs = urllib.parse.urlencode(params)
+    url = 'https://api.pokemontcg.io/v2/' + endpoint + '?' + qs
+    cmd = ['curl', '-s', '--max-time', '12', '-H', 'Accept: application/json']
+    if key:
+        cmd += ['-H', 'X-Api-Key: ' + key]
+    cmd.append(url)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError('curl error: ' + result.stderr)
+    return json.loads(result.stdout)
+
 @app.route('/api/tcg/test')
 def tcg_test():
-    """Debug: test connectivity to pokemontcg.io."""
-    import requests as req
-    import socket
-    UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    """Debug: test connectivity to pokemontcg.io via curl."""
     result = {'key_set': bool(os.environ.get('TCG_API_KEY')), 'steps': []}
     try:
-        ip = socket.gethostbyname('api.pokemontcg.io')
-        result['steps'].append(f'DNS ok → {ip}')
+        data = _tcg_curl('cards', {'q': 'name:pikachu', 'pageSize': '1'})
+        result['steps'].append('curl ok')
+        result['ok'] = 'data' in data
+        result['card_count'] = len(data.get('data', []))
     except Exception as e:
-        result['steps'].append(f'DNS FAILED: {e}')
-        return jsonify(result), 502
-    try:
-        headers = {'User-Agent': UA}
-        key = os.environ.get('TCG_API_KEY', '')
-        if key:
-            headers['X-Api-Key'] = key
-        r = req.get('https://api.pokemontcg.io/v2/cards?q=name:pikachu&pageSize=1',
-                    headers=headers, timeout=12)
-        result['steps'].append(f'HTTP {r.status_code}')
-        result['ok'] = r.status_code == 200
-        if r.status_code == 200:
-            data = r.json()
-            result['card_count'] = len(data.get('data', []))
-    except Exception as e:
-        result['steps'].append(f'HTTP FAILED: {e}')
+        result['steps'].append('FAILED: ' + str(e))
         result['ok'] = False
     return jsonify(result)
 
 @app.route('/api/tcg/sets')
 def tcg_sets():
-    """Proxy PokéTCG sets — used by Stats for set completion %."""
-    import requests as req
-    params = {k: v for k, v in request.args.items()}
-    headers = {}
-    key = os.environ.get('TCG_API_KEY', '')
-    if key:
-        headers['X-Api-Key'] = key
+    """Proxy PokéTCG sets via curl."""
     try:
-        r = req.get('https://api.pokemontcg.io/v2/sets', params=params, headers=headers, timeout=10)
-        return jsonify(r.json()), r.status_code
+        data = _tcg_curl('sets', {'pageSize': '250'})
+        return jsonify(data)
     except Exception as e:
         return jsonify({'error': str(e), 'data': []}), 502
 
 @app.route('/api/tcg/cards')
 def tcg_search():
-    """Proxy PokéTCG card search — browser can't reach pokemontcg.io directly."""
-    import requests as req
+    """Proxy PokéTCG card search via curl."""
     params = {k: v for k, v in request.args.items()}
-    headers = {}
-    key = os.environ.get('TCG_API_KEY', '')
-    if key:
-        headers['X-Api-Key'] = key
-    key_status = 'set' if key else 'NOT SET'
-    headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-    print(f'[tcg] searching: {params.get("q")} (key={key_status})')
+    key_status = 'set' if os.environ.get('TCG_API_KEY') else 'NOT SET'
+    print('[tcg] searching: ' + str(params.get('q')) + ' (key=' + key_status + ')')
     try:
-        r = req.get('https://api.pokemontcg.io/v2/cards', params=params, headers=headers, timeout=15)
-        print(f'[tcg] response: HTTP {r.status_code}, {len(r.json().get("data", []))} cards')
-        return jsonify(r.json()), r.status_code
+        data = _tcg_curl('cards', params)
+        print('[tcg] got ' + str(len(data.get('data', []))) + ' cards')
+        return jsonify(data)
     except Exception as e:
-        print(f'[tcg] ERROR: {e}')
+        print('[tcg] ERROR: ' + str(e))
         return jsonify({'error': str(e), 'data': []}), 502
 
 @app.route('/api/locate/<name>')
