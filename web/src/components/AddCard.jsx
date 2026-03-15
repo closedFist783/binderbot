@@ -1,247 +1,219 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState } from 'react'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
-function getPrice(card) {
-  const p = card.tcgplayer?.prices
-  if (!p) return 0
-  return (
-    p.holofoil?.market ||
-    p.normal?.market ||
-    p['1stEditionHolofoil']?.market ||
-    p.reverseHolofoil?.market ||
-    p.unlimitedHolofoil?.market ||
-    0
-  )
-}
+const SETS = [
+  'SVI','PAL','OBF','MEW','PAR','PAF','TEF','TWM','SFA','SCR','SSP','PRE',
+  'SVP','BRS','ASR','LOR','SIT','CRZ','SHF','FST','CEL','EVS','CRE','BST',
+  'VIV','CPA','DAA','SSH','RCL','SHF','UNB','DET','TEU','LOT','CEL','UPR',
+  'FLI','UPR','CES','DRM','GRI','BUS','SUM','GEN','FCO','STS','EVO','BKT',
+  'AOR','BKP','PGO',
+].filter((v, i, a) => a.indexOf(v) === i).sort()
 
-function cardPayload(card, qty) {
-  return {
-    tcg_id:          card.id,
-    name:            card.name,
-    set_name:        card.set?.name || '',
-    set_code:        card.set?.ptcgoCode || card.set?.id || '',
-    card_number:     card.number,
-    rarity:          card.rarity || '',
-    supertype:       card.supertype || '',
-    image_url:       card.images?.small || '',
-    scan_image_path: null,
-    tcgplayer_price: getPrice(card),
-    identified_by:   'manual',
-    confidence:      1.0,
-    needs_review:    0,
-    qty,
-  }
-}
+const SUPERTYPES = ['Pokémon', 'Trainer', 'Energy']
 
 export default function AddCard() {
-  const [query, setQuery]       = useState('')
-  const [results, setResults]   = useState([])
-  const [loading, setLoading]   = useState(false)
-  const [adding, setAdding]     = useState(null)   // card id being added
-  const [added, setAdded]       = useState({})     // { cardId: count }
-  const [error, setError]       = useState('')
-  const [qty, setQty]           = useState(1)
-  const debounceRef             = useRef(null)
+  const [form, setForm] = useState({
+    name: '', set_code: '', card_number: '', rarity: '',
+    supertype: 'Pokémon', tcgplayer_price: '', qty: 1,
+  })
+  const [status, setStatus]   = useState(null)   // null | 'adding' | 'ok' | 'error'
+  const [error, setError]     = useState('')
+  const [addedCount, setAddedCount] = useState(0)
 
-  const search = useCallback((q) => {
-    if (!q.trim() || q.trim().length < 2) { setResults([]); return }
-    setLoading(true)
-    setError('')
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({
-          q: `name:${q.trim()}`,
-          pageSize: '30',
-          orderBy: '-set.releaseDate',
-        })
-        const r = await fetch(`${BASE}/api/tcg/cards?${params}`)
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        const data = await r.json()
-        setResults(data.data || [])
-        if (!data.data?.length) setError('No cards found for that name.')
-      } catch (e) {
-        setError(`Search failed: ${e.message} — check console for details`)
-        console.error('[AddCard] PokéTCG fetch error:', e)
-        setResults([])
-      } finally {
-        setLoading(false)
-      }
-    }, 400)
-  }, [])
-
-  function handleInput(e) {
-    const v = e.target.value
-    setQuery(v)
-    search(v)
+  function set(field, val) {
+    setForm(f => ({ ...f, [field]: val }))
+    setStatus(null)
   }
 
-  async function addCard(card) {
-    setAdding(card.id)
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.name.trim()) { setError('Card name is required.'); return }
+    setStatus('adding')
     setError('')
     try {
-      // Add `qty` copies — each as a separate card entry (matches scanner behaviour)
-      for (let i = 0; i < qty; i++) {
+      const payload = {
+        name:            form.name.trim(),
+        set_code:        form.set_code.trim().toUpperCase(),
+        card_number:     form.card_number.trim(),
+        rarity:          form.rarity.trim(),
+        supertype:       form.supertype,
+        set_name:        '',
+        image_url:       '',
+        tcgplayer_price: parseFloat(form.tcgplayer_price) || 0,
+        identified_by:   'manual',
+        confidence:      1.0,
+        needs_review:    0,
+      }
+      for (let i = 0; i < form.qty; i++) {
         const r = await fetch(`${BASE}/api/cards/add`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cardPayload(card, 1)),
+          body: JSON.stringify(payload),
         })
-        if (!r.ok) throw new Error(await r.text())
+        if (!r.ok) throw new Error(`Server error ${r.status}`)
       }
-      setAdded(prev => ({ ...prev, [card.id]: (prev[card.id] || 0) + qty }))
+      setAddedCount(n => n + form.qty)
+      setStatus('ok')
+      // Clear name + number, keep set/type for batch entry
+      setForm(f => ({ ...f, name: '', card_number: '', tcgplayer_price: '' }))
+      setTimeout(() => setStatus(null), 2000)
     } catch (e) {
-      setError(`Failed to add card: ${e.message}`)
-    } finally {
-      setAdding(null)
+      setError(e.message)
+      setStatus('error')
     }
   }
 
-  const totalAdded = Object.values(added).reduce((s, n) => s + n, 0)
+  const inputStyle = {
+    width: '100%', padding: '10px 12px', boxSizing: 'border-box',
+    background: 'var(--surface)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: '0.9rem',
+  }
+  const labelStyle = {
+    display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)',
+    marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em',
+  }
 
   return (
-    <div>
-      {/* Search bar */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+    <div style={{ maxWidth: 480 }}>
+      <div style={{ marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+          Manually add cards to your collection
+        </div>
+        {addedCount > 0 && (
+          <div style={{ fontSize: '0.78rem', color: '#4caf50', fontWeight: 600 }}>
+            ✅ {addedCount} added this session
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        {/* Card name */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Card Name *</label>
           <input
             type="text"
-            placeholder="Search for a card (e.g. Charizard, Pikachu ex…)"
-            value={query}
-            onChange={handleInput}
-            style={{
-              flex: 1, padding: '10px 14px',
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: '0.9rem',
-            }}
-            autoFocus
+            placeholder="e.g. Charizard ex"
+            value={form.name}
+            onChange={e => set('name', e.target.value)}
+            style={inputStyle}
             autoComplete="off"
-            spellCheck={false}
+            autoFocus
           />
-          {/* Quantity */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        </div>
+
+        {/* Set + Number side by side */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Set Code</label>
+            <input
+              type="text"
+              placeholder="e.g. PAR"
+              value={form.set_code}
+              onChange={e => set('set_code', e.target.value)}
+              style={inputStyle}
+              autoComplete="off"
+              maxLength={6}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Card Number</label>
+            <input
+              type="text"
+              placeholder="e.g. 201"
+              value={form.card_number}
+              onChange={e => set('card_number', e.target.value)}
+              style={inputStyle}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        {/* Type + Rarity side by side */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>Type</label>
+            <select
+              value={form.supertype}
+              onChange={e => set('supertype', e.target.value)}
+              style={{ ...inputStyle, cursor: 'pointer' }}>
+              {SUPERTYPES.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Rarity</label>
+            <input
+              type="text"
+              placeholder="e.g. Rare Holo ex"
+              value={form.rarity}
+              onChange={e => set('rarity', e.target.value)}
+              style={inputStyle}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        {/* Price */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Market Price (USD)</label>
+          <input
+            type="number"
+            placeholder="e.g. 12.50"
+            value={form.tcgplayer_price}
+            onChange={e => set('tcgplayer_price', e.target.value)}
+            style={inputStyle}
+            min="0"
+            step="0.01"
+          />
+        </div>
+
+        {/* Qty + Submit */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>Qty</span>
             {[1, 2, 3, 4].map(n => (
-              <button key={n} onClick={() => setQty(n)}
+              <button type="button" key={n} onClick={() => set('qty', n)}
                 style={{
-                  width: 32, height: 32, borderRadius: 4, cursor: 'pointer', fontSize: '0.82rem',
-                  border: `1px solid ${qty === n ? 'var(--gold)' : 'var(--border)'}`,
-                  background: qty === n ? 'rgba(201,168,76,0.15)' : 'var(--surface)',
-                  color: qty === n ? 'var(--gold)' : 'var(--text-dim)',
+                  width: 34, height: 34, borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem',
+                  border: `1px solid ${form.qty === n ? 'var(--gold)' : 'var(--border)'}`,
+                  background: form.qty === n ? 'rgba(201,168,76,0.15)' : 'var(--surface)',
+                  color: form.qty === n ? 'var(--gold)' : 'var(--text-dim)',
                 }}>
                 {n}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Status row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-          <span>
-            {loading && '🔍 Searching…'}
-            {!loading && results.length > 0 && `${results.length} results`}
-            {!loading && query.length >= 2 && results.length === 0 && 'No results'}
-          </span>
-          {totalAdded > 0 && (
-            <span style={{ color: '#4caf50' }}>
-              ✅ {totalAdded} card{totalAdded !== 1 ? 's' : ''} added this session
-            </span>
-          )}
+          <button
+            type="submit"
+            disabled={status === 'adding'}
+            style={{
+              flex: 1, padding: '10px 0', borderRadius: 'var(--radius)', cursor: status === 'adding' ? 'wait' : 'pointer',
+              border: '1px solid var(--gold-dim)',
+              background: status === 'ok' ? 'rgba(76,175,80,0.15)' : 'rgba(201,168,76,0.12)',
+              color: status === 'ok' ? '#4caf50' : 'var(--gold)',
+              fontSize: '0.9rem', fontWeight: 700,
+              transition: 'all 0.15s',
+            }}>
+            {status === 'adding' ? '⏳ Adding…' : status === 'ok' ? `✓ Added ×${form.qty > 1 ? form.qty : ''}1`.replace('×1', '') : `+ Add ×${form.qty}`}
+          </button>
         </div>
 
         {error && (
-          <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(229,115,115,0.1)',
+          <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(229,115,115,0.1)',
             border: '1px solid #e57373', borderRadius: 6, fontSize: '0.8rem', color: '#e57373' }}>
             {error}
           </div>
         )}
+      </form>
+
+      {/* Batch entry tip */}
+      <div style={{ marginTop: 24, padding: '10px 14px', background: 'var(--surface)',
+        border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+        fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        💡 <strong>Batch tip:</strong> Set code and type are remembered between entries. 
+        Just change the name and number to quickly add multiple cards from the same set.
       </div>
-
-      {/* Results grid */}
-      {results.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-          {results.map(card => {
-            const price     = getPrice(card)
-            const addedCount = added[card.id] || 0
-            const isAdding  = adding === card.id
-
-            return (
-              <div key={card.id}
-                style={{
-                  background: 'var(--surface)', border: `1px solid ${addedCount > 0 ? 'var(--gold-dim)' : 'var(--border)'}`,
-                  borderRadius: 'var(--radius)', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-                  transition: 'border-color 0.15s',
-                }}>
-
-                {/* Card image */}
-                <div style={{ position: 'relative' }}>
-                  {card.images?.small ? (
-                    <img src={card.images.small} alt={card.name}
-                      style={{ width: '100%', display: 'block', aspectRatio: '3/4', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', aspectRatio: '3/4', background: 'var(--surface2)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: 'var(--text-dim)', fontSize: '0.72rem' }}>
-                      No image
-                    </div>
-                  )}
-                  {addedCount > 0 && (
-                    <div style={{ position: 'absolute', top: 6, right: 6, background: '#4caf50',
-                      color: '#fff', borderRadius: '50%', width: 22, height: 22,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.72rem', fontWeight: 700 }}>
-                      {addedCount}
-                    </div>
-                  )}
-                </div>
-
-                {/* Card info */}
-                <div style={{ padding: '8px 10px', flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.2 }}>{card.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                    {card.set?.name}
-                  </div>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>
-                    #{card.number} · {card.rarity || '—'}
-                  </div>
-                  {price > 0 && (
-                    <div style={{ fontSize: '0.75rem', color: '#4caf50', fontWeight: 600 }}>
-                      ${price.toFixed(2)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Add button */}
-                <button
-                  onClick={() => addCard(card)}
-                  disabled={isAdding}
-                  style={{
-                    margin: '0 10px 10px', padding: '7px 0', borderRadius: 4, cursor: isAdding ? 'wait' : 'pointer',
-                    border: `1px solid ${addedCount > 0 ? 'var(--gold-dim)' : 'var(--border)'}`,
-                    background: addedCount > 0 ? 'rgba(201,168,76,0.12)' : 'var(--surface2)',
-                    color: addedCount > 0 ? 'var(--gold)' : 'var(--text-dim)',
-                    fontSize: '0.78rem', fontWeight: 600, transition: 'all 0.15s',
-                  }}>
-                  {isAdding ? '⏳ Adding…' : addedCount > 0 ? `✓ Add ${qty} more` : `+ Add ×${qty}`}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && query.length < 2 && results.length === 0 && (
-        <div style={{ textAlign: 'center', paddingTop: 60, color: 'var(--text-dim)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 12 }}>🔍</div>
-          <div style={{ fontSize: '0.9rem' }}>Search any Pokémon card to add it to your collection</div>
-          <div style={{ fontSize: '0.78rem', marginTop: 6, opacity: 0.6 }}>
-            Uses the PokéTCG database — requires internet connection
-          </div>
-        </div>
-      )}
     </div>
   )
 }
