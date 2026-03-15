@@ -33,8 +33,11 @@ TCG_KEY=$(grep VITE_TCG_API_KEY ../web/.env 2>/dev/null | cut -d= -f2)
 # Build local card database if it doesn't exist
 if [ ! -f "card_db.json" ]; then
   echo ""
-  echo "📦 First run: downloading card database (~20k cards, takes ~2 min)..."
+  echo "📦 First run: downloading card database (~20k cards, ~30 sec)..."
   python3 fetch_cards.py
+  echo ""
+  echo "💰 Fetching prices (run 'python3 update_prices.py' anytime to refresh)..."
+  python3 update_prices.py
   echo ""
 fi
 
