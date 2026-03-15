@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 
-const BASE = () => import.meta.env.VITE_API_URL || ''
+const BASE = import.meta.env.VITE_API_URL || ''
 const TCG_API = 'https://api.pokemontcg.io/v2/cards'
 
 function getPrice(card) {
@@ -78,7 +78,7 @@ export default function AddCard() {
     try {
       // Add `qty` copies — each as a separate card entry (matches scanner behaviour)
       for (let i = 0; i < qty; i++) {
-        const r = await fetch(`${BASE()}/api/cards/add`, {
+        const r = await fetch(`${BASE}/api/cards/add`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(cardPayload(card, 1)),
