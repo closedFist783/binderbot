@@ -32,21 +32,24 @@ export default function AddCard() {
     setError('')
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 8000)
       try {
         const params = new URLSearchParams({
           q: `name:${q.trim()}`,
           pageSize: '30',
           orderBy: '-set.releaseDate',
         })
-        const r = await fetch(`${TCG_API}?${params}`)
+        const r = await fetch(`${TCG_API}?${params}`, { signal: controller.signal })
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
         setResults(data.data || [])
         if (!data.data?.length) setError('No cards found.')
       } catch (e) {
-        setError(`Search failed: ${e.message}`)
+        setError(e.name === 'AbortError' ? 'Search timed out — try again' : `Search failed: ${e.message}`)
         setResults([])
       } finally {
+        clearTimeout(timeout)
         setLoading(false)
       }
     }, 400)
