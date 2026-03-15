@@ -82,26 +82,38 @@ def main():
     for i, (set_code, cards) in enumerate(sets_to_update.items()):
         set_name = cards[0].get('setName', set_code)
         print(f'  [{i+1}/{len(sets_to_update)}] {set_name} ({set_code})...', end=' ', flush=True)
-        try:
-            prices = fetch_prices_for_set(session, set_code)
+        prices = {}
+        last_err = None
+        for attempt in range(3):
+            try:
+                prices = fetch_prices_for_set(session, set_code)
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                wait = 2 ** attempt
+                print(f'retry {attempt+1}...', end=' ', flush=True)
+                time.sleep(wait)
+        if last_err:
+            print(f'FAILED: {last_err}')
+            failed.append(set_code)
+        else:
             for card in cards:
                 p = prices.get(card['number'], 0)
                 card['price'] = p
                 if p > 0:
                     updated += 1
             print(f'{len(prices)} prices, {sum(1 for c in cards if c["price"] > 0)}/{len(cards)} matched')
-        except Exception as e:
-            print(f'FAILED: {e}')
-            failed.append(set_code)
-        time.sleep(0.1)
+        time.sleep(0.3)
 
     print(f'\nSaving updated db ({updated} prices updated)...')
     with open(DB_FILE, 'w') as f:
         json.dump(db, f, separators=(',', ':'))
 
     if failed:
-        print(f'Failed sets: {failed}')
-    print('Done!')
+        print(f'\nFailed sets ({len(failed)}): {" ".join(failed)}')
+        print(f'Re-run with: python3 update_prices.py {" ".join(failed)}')
+    print(f'Done! {updated} prices updated.')
 
 if __name__ == '__main__':
     main()
