@@ -159,6 +159,37 @@ def add_card_manual():
             ids.append(pid)
     return jsonify({'ok': True, 'physical_ids': ids})
 
+@app.route('/api/tcg/test')
+def tcg_test():
+    """Debug: test connectivity to pokemontcg.io."""
+    import requests as req
+    import socket
+    result = {'key_set': bool(os.environ.get('TCG_API_KEY')), 'steps': []}
+    # DNS check
+    try:
+        ip = socket.gethostbyname('api.pokemontcg.io')
+        result['steps'].append(f'DNS ok → {ip}')
+    except Exception as e:
+        result['steps'].append(f'DNS FAILED: {e}')
+        return jsonify(result), 502
+    # HTTP check
+    try:
+        headers = {}
+        key = os.environ.get('TCG_API_KEY', '')
+        if key:
+            headers['X-Api-Key'] = key
+        r = req.get('https://api.pokemontcg.io/v2/cards?q=name:pikachu&pageSize=1',
+                    headers=headers, timeout=8)
+        result['steps'].append(f'HTTP {r.status_code}')
+        result['ok'] = r.status_code == 200
+        if r.status_code == 200:
+            data = r.json()
+            result['card_count'] = len(data.get('data', []))
+    except Exception as e:
+        result['steps'].append(f'HTTP FAILED: {e}')
+        result['ok'] = False
+    return jsonify(result)
+
 @app.route('/api/tcg/sets')
 def tcg_sets():
     """Proxy PokéTCG sets — used by Stats for set completion %."""
@@ -183,10 +214,13 @@ def tcg_search():
     key = os.environ.get('TCG_API_KEY', '')
     if key:
         headers['X-Api-Key'] = key
+    print(f'[tcg] searching: {params.get("q")} (key={'set' if key else 'NOT SET'})')
     try:
         r = req.get('https://api.pokemontcg.io/v2/cards', params=params, headers=headers, timeout=10)
+        print(f'[tcg] response: HTTP {r.status_code}, {len(r.json().get("data", []))} cards')
         return jsonify(r.json()), r.status_code
     except Exception as e:
+        print(f'[tcg] ERROR: {e}')
         return jsonify({'error': str(e), 'data': []}), 502
 
 @app.route('/api/locate/<name>')
