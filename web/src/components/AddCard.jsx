@@ -58,10 +58,13 @@ export default function AddCard() {
           orderBy: '-set.releaseDate',
         })
         const r = await fetch(`${TCG_API}?${params}`)
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
         setResults(data.data || [])
-      } catch {
-        setError('Search failed — check your connection.')
+        if (!data.data?.length) setError('No cards found for that name.')
+      } catch (e) {
+        setError(`Search failed: ${e.message} — check console for details`)
+        console.error('[AddCard] PokéTCG fetch error:', e)
         setResults([])
       } finally {
         setLoading(false)
