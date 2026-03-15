@@ -34,7 +34,7 @@ export default function Stats() {
     const codes = [...new Set(cards.map(c => c.set_code).filter(Boolean))]
     if (codes.length === 0) return
     setLoadingSets(true)
-    fetch('/tcg/sets?pageSize=250')
+    fetch(`${BASE}/api/tcg/sets?pageSize=250`)
       .then(r => r.json())
       .then(data => {
         const map = {}

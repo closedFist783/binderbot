@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 
 const BASE    = import.meta.env.VITE_API_URL || ''
-const TCG_API = '/tcg/cards'   // proxied by Vite dev server → api.pokemontcg.io/v2/cards
+const TCG_API = `${BASE}/api/tcg/cards`  // proxied through Flask → api.pokemontcg.io
 
 function getPrice(card) {
   const p = card.tcgplayer?.prices

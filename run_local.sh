@@ -26,4 +26,8 @@ echo "╔═══════════════════════�
 echo "║  BinderBot local server → localhost:5001  ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
+# Load API key from web/.env if present
+TCG_KEY=$(grep VITE_TCG_API_KEY ../web/.env 2>/dev/null | cut -d= -f2)
+[ -n "$TCG_KEY" ] && export TCG_API_KEY="$TCG_KEY"
+
 python3 server.py

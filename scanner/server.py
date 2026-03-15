@@ -159,6 +159,36 @@ def add_card_manual():
             ids.append(pid)
     return jsonify({'ok': True, 'physical_ids': ids})
 
+@app.route('/api/tcg/sets')
+def tcg_sets():
+    """Proxy PokéTCG sets — used by Stats for set completion %."""
+    import requests as req
+    params = {k: v for k, v in request.args.items()}
+    headers = {}
+    key = os.environ.get('TCG_API_KEY', '')
+    if key:
+        headers['X-Api-Key'] = key
+    try:
+        r = req.get('https://api.pokemontcg.io/v2/sets', params=params, headers=headers, timeout=10)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e), 'data': []}), 502
+
+@app.route('/api/tcg/cards')
+def tcg_search():
+    """Proxy PokéTCG card search — browser can't reach pokemontcg.io directly."""
+    import requests as req
+    params = {k: v for k, v in request.args.items()}
+    headers = {}
+    key = os.environ.get('TCG_API_KEY', '')
+    if key:
+        headers['X-Api-Key'] = key
+    try:
+        r = req.get('https://api.pokemontcg.io/v2/cards', params=params, headers=headers, timeout=10)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e), 'data': []}), 502
+
 @app.route('/api/locate/<name>')
 def locate_card(name):
     """Find a card by name — returns physical_id and bin info."""
