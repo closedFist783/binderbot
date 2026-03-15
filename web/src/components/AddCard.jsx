@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 
 const BASE = import.meta.env.VITE_API_URL || ''
-const TCG_API = 'https://api.pokemontcg.io/v2/cards'
 
 function getPrice(card) {
   const p = card.tcgplayer?.prices
@@ -57,7 +56,7 @@ export default function AddCard() {
           pageSize: '30',
           orderBy: '-set.releaseDate',
         })
-        const r = await fetch(`${TCG_API}?${params}`)
+        const r = await fetch(`${BASE}/api/tcg/cards?${params}`)
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
         setResults(data.data || [])

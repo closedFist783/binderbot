@@ -159,6 +159,23 @@ def add_card_manual():
             ids.append(pid)
     return jsonify({'ok': True, 'physical_ids': ids})
 
+@app.route('/api/tcg/cards')
+def tcg_card_search():
+    """Proxy PokéTCG API search — avoids browser CORS/network restrictions."""
+    import requests as req
+    q        = request.args.get('q', '')
+    page_size = request.args.get('pageSize', '30')
+    order_by  = request.args.get('orderBy', '-set.releaseDate')
+    try:
+        r = req.get(
+            'https://api.pokemontcg.io/v2/cards',
+            params={'q': q, 'pageSize': page_size, 'orderBy': order_by},
+            timeout=10,
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 502
+
 @app.route('/api/locate/<name>')
 def locate_card(name):
     """Find a card by name — returns physical_id and bin info."""
