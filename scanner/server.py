@@ -164,22 +164,21 @@ def tcg_test():
     """Debug: test connectivity to pokemontcg.io."""
     import requests as req
     import socket
+    UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     result = {'key_set': bool(os.environ.get('TCG_API_KEY')), 'steps': []}
-    # DNS check
     try:
         ip = socket.gethostbyname('api.pokemontcg.io')
         result['steps'].append(f'DNS ok → {ip}')
     except Exception as e:
         result['steps'].append(f'DNS FAILED: {e}')
         return jsonify(result), 502
-    # HTTP check
     try:
-        headers = {}
+        headers = {'User-Agent': UA}
         key = os.environ.get('TCG_API_KEY', '')
         if key:
             headers['X-Api-Key'] = key
         r = req.get('https://api.pokemontcg.io/v2/cards?q=name:pikachu&pageSize=1',
-                    headers=headers, timeout=8)
+                    headers=headers, timeout=12)
         result['steps'].append(f'HTTP {r.status_code}')
         result['ok'] = r.status_code == 200
         if r.status_code == 200:
@@ -215,9 +214,10 @@ def tcg_search():
     if key:
         headers['X-Api-Key'] = key
     key_status = 'set' if key else 'NOT SET'
+    headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     print(f'[tcg] searching: {params.get("q")} (key={key_status})')
     try:
-        r = req.get('https://api.pokemontcg.io/v2/cards', params=params, headers=headers, timeout=10)
+        r = req.get('https://api.pokemontcg.io/v2/cards', params=params, headers=headers, timeout=15)
         print(f'[tcg] response: HTTP {r.status_code}, {len(r.json().get("data", []))} cards')
         return jsonify(r.json()), r.status_code
     except Exception as e:
