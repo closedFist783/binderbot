@@ -10,6 +10,11 @@ export default defineConfig({
         target: 'http://192.168.18.195:5000',
         changeOrigin: true,
       },
+      '/tcg': {
+        target: 'https://api.pokemontcg.io/v2',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/tcg/, ''),
+      },
     },
   },
 })
