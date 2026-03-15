@@ -13,9 +13,24 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 from db import init_db, get_conn, insert_card, get_all_cards, get_card_by_physical_id, get_stats, mark_reviewed
-from identify import identify_card
-from camera import init_camera, capture, close_camera
-from motor import init_motor, feed_card, eject_card, cleanup as motor_cleanup
+
+# Hardware modules — optional (not available when running locally without Pi hardware)
+try:
+    from identify import identify_card
+    from camera import init_camera, capture, close_camera
+    from motor import init_motor, feed_card, eject_card, cleanup as motor_cleanup
+    HAS_HARDWARE = True
+except Exception as _hw_err:
+    HAS_HARDWARE = False
+    print(f'[binderbot] Hardware unavailable ({_hw_err}) — running in local/API-only mode')
+    def identify_card(img): return {}
+    def init_camera(): pass
+    def capture(): return None
+    def close_camera(): pass
+    def init_motor(): pass
+    def feed_card(): pass
+    def eject_card(): pass
+    def motor_cleanup(): pass
 
 SCANS_DIR = os.path.join(os.path.dirname(__file__), '..', 'scans')
 os.makedirs(SCANS_DIR, exist_ok=True)
@@ -77,6 +92,8 @@ def status():
 @app.route('/api/scan', methods=['POST'])
 def scan_one():
     """Manually trigger a single scan (called by UI button or foot pedal)."""
+    if not HAS_HARDWARE:
+        return jsonify({'error': 'Scanner hardware not available in local mode'}), 503
     feed_card()
     time.sleep(0.3)  # let card settle under camera
     result = _do_scan()
@@ -158,6 +175,8 @@ def locate_card(name):
 @app.route('/api/preview')
 def preview():
     """Return a live camera snapshot as a JPEG image — open directly in browser."""
+    if not HAS_HARDWARE:
+        return jsonify({'error': 'Camera not available in local mode'}), 503
     from flask import Response
     img = capture()
     buf = io.BytesIO()
@@ -168,6 +187,8 @@ def preview():
 @app.route('/api/preview-ocr')
 def preview_ocr():
     """Return the preprocessed OCR image — shows exactly what Tesseract sees."""
+    if not HAS_HARDWARE:
+        return jsonify({'error': 'Camera not available in local mode'}), 503
     from flask import Response
     from identify import _preprocess
     img = capture()
