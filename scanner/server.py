@@ -214,7 +214,8 @@ def tcg_search():
     key = os.environ.get('TCG_API_KEY', '')
     if key:
         headers['X-Api-Key'] = key
-    print(f'[tcg] searching: {params.get("q")} (key={'set' if key else 'NOT SET'})')
+    key_status = 'set' if key else 'NOT SET'
+    print(f'[tcg] searching: {params.get("q")} (key={key_status})')
     try:
         r = req.get('https://api.pokemontcg.io/v2/cards', params=params, headers=headers, timeout=10)
         print(f'[tcg] response: HTTP {r.status_code}, {len(r.json().get("data", []))} cards')
