@@ -159,58 +159,70 @@ def add_card_manual():
             ids.append(pid)
     return jsonify({'ok': True, 'physical_ids': ids})
 
-def _tcg_curl(endpoint, params):
-    """Use system curl (macOS SecureTransport) — bypasses Cloudflare TLS fingerprinting."""
-    import subprocess
-    import urllib.parse
-    key = os.environ.get('TCG_API_KEY', '')
-    qs = urllib.parse.urlencode(params)
-    url = 'https://api.pokemontcg.io/v2/' + endpoint + '?' + qs
-    cmd = ['curl', '-s', '--max-time', '12', '-H', 'Accept: application/json']
-    if key:
-        cmd += ['-H', 'X-Api-Key: ' + key]
-    cmd.append(url)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-    if result.returncode != 0 or not result.stdout.strip():
-        raise RuntimeError('curl error: ' + result.stderr)
-    return json.loads(result.stdout)
+# ── Local card database ───────────────────────────────────────────────────────
+
+_card_db = None
+_card_db_path = os.path.join(os.path.dirname(__file__), 'card_db.json')
+
+def _load_card_db():
+    global _card_db
+    if _card_db is None:
+        if os.path.exists(_card_db_path):
+            with open(_card_db_path) as f:
+                _card_db = json.load(f)
+            print(f'[tcg] loaded {len(_card_db)} cards from local db')
+        else:
+            _card_db = []
+            print('[tcg] card_db.json not found — run fetch_cards.py to build it')
+    return _card_db
 
 @app.route('/api/tcg/test')
 def tcg_test():
-    """Debug: test connectivity to pokemontcg.io via curl."""
-    result = {'key_set': bool(os.environ.get('TCG_API_KEY')), 'steps': []}
-    try:
-        data = _tcg_curl('cards', {'q': 'name:pikachu', 'pageSize': '1'})
-        result['steps'].append('curl ok')
-        result['ok'] = 'data' in data
-        result['card_count'] = len(data.get('data', []))
-    except Exception as e:
-        result['steps'].append('FAILED: ' + str(e))
-        result['ok'] = False
-    return jsonify(result)
+    db = _load_card_db()
+    return jsonify({'ok': len(db) > 0, 'card_count': len(db),
+                    'db_path': _card_db_path, 'db_exists': os.path.exists(_card_db_path)})
 
 @app.route('/api/tcg/sets')
 def tcg_sets():
-    """Proxy PokéTCG sets via curl."""
-    try:
-        data = _tcg_curl('sets', {'pageSize': '250'})
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e), 'data': []}), 502
+    db = _load_card_db()
+    seen, sets = set(), []
+    for c in db:
+        key = c.get('set', '')
+        if key and key not in seen:
+            seen.add(key)
+            sets.append({'id': key, 'ptcgoCode': key, 'name': c.get('setName', key), 'total': 0})
+    return jsonify({'data': sets})
 
 @app.route('/api/tcg/cards')
 def tcg_search():
-    """Proxy PokéTCG card search via curl."""
-    params = {k: v for k, v in request.args.items()}
-    key_status = 'set' if os.environ.get('TCG_API_KEY') else 'NOT SET'
-    print('[tcg] searching: ' + str(params.get('q')) + ' (key=' + key_status + ')')
-    try:
-        data = _tcg_curl('cards', params)
-        print('[tcg] got ' + str(len(data.get('data', []))) + ' cards')
-        return jsonify(data)
-    except Exception as e:
-        print('[tcg] ERROR: ' + str(e))
-        return jsonify({'error': str(e), 'data': []}), 502
+    """Search local card database."""
+    q = request.args.get('q', '').strip()
+    # parse "name:charizard" format
+    name_query = ''
+    if q.lower().startswith('name:'):
+        name_query = q[5:].strip().lower()
+    else:
+        name_query = q.lower()
+
+    if not name_query:
+        return jsonify({'data': []})
+
+    db = _load_card_db()
+    results = [c for c in db if name_query in c.get('name', '').lower()]
+    # Sort: exact prefix first, then alphabetical
+    results.sort(key=lambda c: (not c['name'].lower().startswith(name_query), c['name'], c.get('set', '')))
+    # Convert to pokemontcg.io response format so frontend works unchanged
+    formatted = [{
+        'id':         c['id'],
+        'name':       c['name'],
+        'number':     c['number'],
+        'rarity':     c.get('rarity', ''),
+        'supertype':  c.get('type', ''),
+        'set':        {'name': c.get('setName', ''), 'ptcgoCode': c.get('set', ''), 'id': c.get('set', '')},
+        'images':     {'small': c.get('img', '')},
+        'tcgplayer':  {'prices': {'normal': {'market': c.get('price', 0)}}},
+    } for c in results[:40]]
+    return jsonify({'data': formatted})
 
 @app.route('/api/locate/<name>')
 def locate_card(name):
