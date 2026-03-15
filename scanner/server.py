@@ -115,6 +115,33 @@ def review_card(physical_id):
         )
     return jsonify({'ok': True})
 
+@app.route('/api/cards/add', methods=['POST'])
+def add_card_manual():
+    """Manually add a card to the collection (from UI search)."""
+    body = request.json or {}
+    qty  = int(body.pop('qty', 1))
+    data = {
+        'tcg_id':          body.get('tcg_id'),
+        'name':            body.get('name'),
+        'set_name':        body.get('set_name', ''),
+        'set_code':        body.get('set_code', ''),
+        'card_number':     body.get('card_number', ''),
+        'rarity':          body.get('rarity', ''),
+        'supertype':       body.get('supertype', ''),
+        'image_url':       body.get('image_url', ''),
+        'scan_image_path': None,
+        'tcgplayer_price': body.get('tcgplayer_price', 0) or 0,
+        'identified_by':   'manual',
+        'confidence':      1.0,
+        'needs_review':    0,
+    }
+    ids = []
+    with get_conn() as conn:
+        for _ in range(max(1, qty)):
+            pid = insert_card(conn, data)
+            ids.append(pid)
+    return jsonify({'ok': True, 'physical_ids': ids})
+
 @app.route('/api/locate/<name>')
 def locate_card(name):
     """Find a card by name — returns physical_id and bin info."""

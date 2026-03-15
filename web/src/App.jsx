@@ -4,12 +4,14 @@ import Collection from './components/Collection'
 import Locate     from './components/Locate'
 import Stats      from './components/Stats'
 import Decks      from './components/Decks'
+import AddCard    from './components/AddCard'
 import { getStatus } from './lib/api'
 import './App.css'
 
 const TABS = [
   { id: 'scan',       label: '📷 Scan'       },
   { id: 'collection', label: '📦 Collection'  },
+  { id: 'add',        label: '➕ Add Card'    },
   { id: 'decks',      label: '🃏 Decks'       },
   { id: 'locate',     label: '🔍 Locate'      },
   { id: 'stats',      label: '📊 Stats'       },
@@ -54,6 +56,7 @@ export default function App() {
       <main className="main">
         {tab === 'scan'       && <ScanTab    status={status} />}
         {tab === 'collection' && <Collection />}
+        {tab === 'add'        && <AddCard    />}
         {tab === 'decks'      && <Decks      />}
         {tab === 'locate'     && <Locate     />}
         {tab === 'stats'      && <Stats />}
