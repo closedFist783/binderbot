@@ -52,9 +52,12 @@ export default function AddCard() {
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       try {
-        const r = await fetch(
-          `${TCG_API}?q=name:"${encodeURIComponent(q.trim())}"&pageSize=30&orderBy=-set.releaseDate`
-        )
+        const params = new URLSearchParams({
+          q: `name:${q.trim()}`,
+          pageSize: '30',
+          orderBy: '-set.releaseDate',
+        })
+        const r = await fetch(`${TCG_API}?${params}`)
         const data = await r.json()
         setResults(data.data || [])
       } catch {
@@ -111,6 +114,8 @@ export default function AddCard() {
               borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: '0.9rem',
             }}
             autoFocus
+            autoComplete="off"
+            spellCheck={false}
           />
           {/* Quantity */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
