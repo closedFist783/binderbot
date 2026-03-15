@@ -223,9 +223,11 @@ if __name__ == '__main__':
     init_db()
     init_camera()
     init_motor()
-    print('[binderbot] Ready. http://localhost:5000')
+    port = int(os.environ.get('PORT', 5001))
+    print(f'[binderbot] Ready. http://localhost:{port}')
     try:
-        app.run(host='0.0.0.0', port=5000, debug=False)
+        port = int(os.environ.get('PORT', 5001))
+        app.run(host='0.0.0.0', port=port, debug=False)
     finally:
         close_camera()
         motor_cleanup()

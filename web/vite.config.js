@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://192.168.18.195:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
       },
       '/tcg': {
