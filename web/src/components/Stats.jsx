@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 
-const BASE = () => import.meta.env.VITE_API_URL || ''
+const BASE = import.meta.env.VITE_API_URL || ''
 
 async function fetchJSON(path) {
-  const r = await fetch(`${BASE()}${path}`)
+  const r = await fetch(`${BASE}${path}`)
   if (!r.ok) throw new Error(r.status)
   return r.json()
 }
@@ -34,7 +34,7 @@ export default function Stats() {
     const codes = [...new Set(cards.map(c => c.set_code).filter(Boolean))]
     if (codes.length === 0) return
     setLoadingSets(true)
-    fetch('https://api.pokemontcg.io/v2/sets?pageSize=250')
+    fetch('/tcg/sets?pageSize=250')
       .then(r => r.json())
       .then(data => {
         const map = {}
