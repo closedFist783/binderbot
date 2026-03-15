@@ -68,11 +68,157 @@ const TOP_60 = [
 // Index meta-decks by id for fast lookup
 const META_BY_ID = Object.fromEntries(META_DECKS.map(d => [d.id, d]))
 
-function getTier(share) {
-  if (share >= 5)  return { label: 'S', color: '#c9a84c' }
-  if (share >= 2)  return { label: 'A', color: '#6d3eb0' }
-  if (share >= 1)  return { label: 'B', color: '#2e5fa3' }
-  return              { label: 'C', color: '#3a7a3a' }
+// ── Core cards for decks without a full metaId decklist ───────────────────────
+const CORE_CARDS = {
+  'Lugia Archeops': {
+    core: [
+      { name: 'Lugia V',              set_code: 'SIT', number: '138', qty: 3 },
+      { name: 'Lugia VSTAR',          set_code: 'SIT', number: '139', qty: 3 },
+      { name: 'Archeops',             set_code: 'SIT', number: '147', qty: 4 },
+      { name: "Colress's Experiment", set_code: 'LOR', number: '155', qty: 4 },
+      { name: 'Rare Candy',           set_code: '',    number: '',    qty: 4 },
+      { name: 'Ultra Ball',           set_code: '',    number: '',    qty: 4 },
+    ],
+    fillers: ['Energy accelerators', 'Choice Belt', 'Jet Energy', 'supporters'],
+  },
+  'Lost Zone Box': {
+    core: [
+      { name: 'Comfey',               set_code: 'LOR', number: '79',  qty: 4 },
+      { name: 'Cramorant',            set_code: 'LOR', number: '50',  qty: 2 },
+      { name: "Colress's Experiment", set_code: 'LOR', number: '155', qty: 4 },
+      { name: 'Mirage Gate',          set_code: 'LOR', number: '163', qty: 4 },
+      { name: 'Escape Rope',          set_code: '',    number: '',    qty: 4 },
+    ],
+    fillers: ['Sableye LOR', 'Path to the Peak', 'Radiant Greninja', 'attackers of choice'],
+  },
+  'Giratina VSTAR': {
+    core: [
+      { name: 'Giratina V',           set_code: 'LOR', number: '130', qty: 3 },
+      { name: 'Giratina VSTAR',       set_code: 'LOR', number: '131', qty: 3 },
+      { name: 'Comfey',               set_code: 'LOR', number: '79',  qty: 4 },
+      { name: 'Lost City',            set_code: 'LOR', number: '161', qty: 2 },
+      { name: "Colress's Experiment", set_code: 'LOR', number: '155', qty: 4 },
+    ],
+    fillers: ['Radiant Charizard', 'Sableye LOR', 'Pal Pad', 'supporters'],
+  },
+  'Regidrago VSTAR': {
+    core: [
+      { name: 'Regidrago V',          set_code: 'SIT', number: '135', qty: 3 },
+      { name: 'Regidrago VSTAR',      set_code: 'SIT', number: '136', qty: 3 },
+      { name: 'Regieleki VMAX',       set_code: 'EVS', number: '58',  qty: 2 },
+      { name: "Dragon's Call",        set_code: 'SIT', number: '155', qty: 4 },
+      { name: 'Ultra Ball',           set_code: '',    number: '',    qty: 4 },
+    ],
+    fillers: ['Dragon energy attachments', 'various dragon Pokémon for copying', 'Snorlax', 'Cresselia'],
+  },
+  'Palkia VSTAR': {
+    core: [
+      { name: 'Palkia V',             set_code: 'ASR', number: '29',  qty: 3 },
+      { name: 'Palkia VSTAR',         set_code: 'ASR', number: '30',  qty: 3 },
+      { name: 'Sobble',               set_code: 'CRE', number: '41',  qty: 4 },
+      { name: 'Drizzile',             set_code: 'SHF', number: '99',  qty: 3 },
+      { name: 'Irida',                set_code: 'ASR', number: '147', qty: 4 },
+    ],
+    fillers: ['Inteleon CRE', 'Choice Belt', 'Cross Switcher', 'energy'],
+  },
+  'Chien-Pao Baxcalibur': {
+    core: [
+      { name: 'Chien-Pao ex',         set_code: 'PAL', number: '61',  qty: 3 },
+      { name: 'Baxcalibur',           set_code: 'PAL', number: '60',  qty: 3 },
+      { name: 'Frigibax',             set_code: 'PAL', number: '57',  qty: 4 },
+      { name: 'Irida',                set_code: '',    number: '',    qty: 3 },
+      { name: 'Ultra Ball',           set_code: '',    number: '',    qty: 4 },
+    ],
+    fillers: ["Boss's Orders", 'Iono', 'Path to the Peak', 'Water energy', 'Artazon'],
+  },
+  'Roaring Moon ex': {
+    core: [
+      { name: 'Roaring Moon ex',      set_code: 'PAR', number: '124', qty: 4 },
+      { name: 'Munkidori',            set_code: 'TWM', number: '95',  qty: 2 },
+      { name: 'Radiant Greninja',     set_code: 'ASR', number: '46',  qty: 1 },
+      { name: 'Dark Patch',           set_code: 'ASR', number: '139', qty: 4 },
+      { name: "Colress's Experiment", set_code: 'LOR', number: '155', qty: 4 },
+    ],
+    fillers: ['Counter Catcher', 'Iono', "Boss's Orders", 'Dark energy', 'Nest Ball'],
+  },
+  'Terapagos ex': {
+    core: [
+      { name: 'Terapagos ex',                    set_code: 'SCR', number: '128', qty: 3 },
+      { name: 'Cornerstone Mask Ogerpon ex',     set_code: 'TWM', number: '115', qty: 2 },
+      { name: 'Defiance Band',                   set_code: 'SVI', number: '169', qty: 4 },
+      { name: 'Iono',                            set_code: '',    number: '',    qty: 4 },
+      { name: 'Ultra Ball',                      set_code: '',    number: '',    qty: 4 },
+    ],
+    fillers: ['Earthen Vessel', 'Arven', 'various Tera type Pokémon', 'energy'],
+  },
+  'Garbodor Trashalanche': {
+    core: [
+      { name: 'Garbodor',            set_code: 'BKP', number: '57',  qty: 3 },
+      { name: 'Trubbish',            set_code: 'BKP', number: '56',  qty: 4 },
+      { name: 'Garbodor GX',         set_code: 'GRI', number: '51',  qty: 2 },
+      { name: 'Acerola',             set_code: 'BUS', number: '112', qty: 3 },
+      { name: 'Float Stone',         set_code: '',    number: '',    qty: 4 },
+    ],
+    fillers: ['N', 'Hex Maniac', 'Professor Sycamore', 'various support items'],
+  },
+  'Decidueye GX': {
+    core: [
+      { name: 'Decidueye GX',        set_code: 'SHF', number: '7',   qty: 3 },
+      { name: 'Rowlet',              set_code: 'SUM', number: '9',   qty: 4 },
+      { name: 'Dartrix',             set_code: 'SUM', number: '11',  qty: 3 },
+      { name: 'Vileplume',           set_code: 'AOR', number: '3',   qty: 3 },
+      { name: 'Alolan Exeggutor',    set_code: 'FLI', number: '2',   qty: 2 },
+    ],
+    fillers: ['Level Ball', 'Revitalizer', 'Forest of Giant Plants', 'supporters'],
+  },
+  'Zapdos TEU': {
+    core: [
+      { name: 'Zapdos',              set_code: 'TEU', number: '40',  qty: 4 },
+      { name: 'Jirachi',             set_code: 'TEU', number: '99',  qty: 4 },
+      { name: 'Escape Board',        set_code: 'UPR', number: '122', qty: 4 },
+      { name: 'Thunder Mountain',    set_code: 'LOT', number: '191', qty: 4 },
+    ],
+    fillers: ['Tapu Koko Prism Star', 'Electropower', 'Acro Bike', 'Lightning Energy'],
+  },
+}
+
+const DEFAULT_CORE = { core: [], fillers: ['View full list on Limitless for recommended cards'] }
+
+function getCoreCards(deckName) {
+  return CORE_CARDS[deckName] || DEFAULT_CORE
+}
+
+// ── Tier / composite score ────────────────────────────────────────────────────
+
+/**
+ * Compute composite score and tier.
+ * When collectionLoaded=false fall back to share-only heuristic.
+ */
+function computeTier(share, ownedPct, missingFraction, collectionLoaded) {
+  if (!collectionLoaded) {
+    if (share >= 5)  return { label: 'S', color: '#c9a84c', composite: null }
+    if (share >= 2)  return { label: 'A', color: '#6d3eb0', composite: null }
+    if (share >= 1)  return { label: 'B', color: '#2e5fa3', composite: null }
+    return              { label: 'C', color: '#3a7a3a', composite: null }
+  }
+
+  const win_score     = Math.min((share / 8.0) * 100, 100)
+  const owned_score   = ownedPct * 100
+  const missing_score = (1 - missingFraction) * 100
+  const composite     = win_score * 0.40 + owned_score * 0.35 + missing_score * 0.25
+
+  let label, color
+  if (composite >= 70)      { label = 'S'; color = '#c9a84c' }
+  else if (composite >= 45) { label = 'A'; color = '#6d3eb0' }
+  else if (composite >= 25) { label = 'B'; color = '#2e5fa3' }
+  else                      { label = 'C'; color = '#3a7a3a' }
+
+  return {
+    label, color, composite: Math.round(composite),
+    winScore: Math.round(win_score),
+    ownedScore: Math.round(owned_score),
+    missingScore: Math.round(missing_score),
+  }
 }
 
 // Build collection lookup from Pi card list
@@ -92,19 +238,36 @@ function buildCollection(cards) {
 }
 
 function getOwned(card, collection) {
-  const setKey = `${(card.set_code || '').toUpperCase()}-${card.number}`
+  const setKey  = `${(card.set_code || '').toUpperCase()}-${card.number}`
   const nameKey = (card.name || '').toLowerCase()
   return Math.max(collection[setKey] || 0, collection[nameKey] || 0)
+}
+
+// Compute stats for a list of cards (used for both full decks and core cards)
+function computeStats(cards, collection) {
+  let totalCards = 0, ownedCards = 0
+  const missingCards = []
+  for (const c of cards) {
+    totalCards += c.qty
+    const have = Math.min(getOwned(c, collection), c.qty)
+    ownedCards += have
+    const need = c.qty - have
+    if (need > 0) missingCards.push({ ...c, have, need })
+  }
+  const pct = totalCards > 0 ? Math.round((ownedCards / totalCards) * 100) : 0
+  return { totalCards, ownedCards, missingCards, pct }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Decks() {
-  const [collection, setCollection] = useState({})
+  const [collection, setCollection]         = useState({})
   const [collectionLoaded, setCollectionLoaded] = useState(false)
-  const [expanded, setExpanded]     = useState(null)
-  const [search, setSearch]         = useState('')
-  const [tierFilter, setTierFilter] = useState([])
+  const [search, setSearch]                 = useState('')
+  const [tierFilter, setTierFilter]         = useState([])
+  // Detail page state
+  const [view, setView]                     = useState('list')   // 'list' | 'detail'
+  const [selectedDeck, setSelectedDeck]     = useState(null)
 
   // Fetch all cards from Pi
   useEffect(() => {
@@ -117,33 +280,123 @@ export default function Decks() {
           setCollectionLoaded(true)
         }
       })
-      .catch(() => setCollectionLoaded(true)) // no Pi connected — still show list
+      .catch(() => setCollectionLoaded(true))
   }, [])
+
+  function openDetail(deck) {
+    setSelectedDeck(deck)
+    setView('detail')
+  }
+
+  function backToList() {
+    setView('list')
+    setSelectedDeck(null)
+  }
 
   const filtered = useMemo(() => {
     return TOP_60.filter(d => {
-      const tier = getTier(d.share).label
-      if (tierFilter.length > 0 && !tierFilter.includes(tier)) return false
+      const metaDeck   = d.metaId ? META_BY_ID[d.metaId] : null
+      const cards      = metaDeck ? metaDeck.cards : getCoreCards(d.name).core
+      const stats      = computeStats(cards, collection)
+      const ownedPct   = stats.totalCards > 0 ? stats.ownedCards / stats.totalCards : 0
+      const missingFrac = stats.totalCards > 0 ? (stats.totalCards - stats.ownedCards) / stats.totalCards : 1
+      const tier       = computeTier(d.share, ownedPct, missingFrac, collectionLoaded)
+      if (tierFilter.length > 0 && !tierFilter.includes(tier.label)) return false
       if (search && !d.name.toLowerCase().includes(search.toLowerCase())) return false
       return true
     })
-  }, [search, tierFilter])
-
-  function toggle(rank) {
-    setExpanded(prev => prev === rank ? null : rank)
-  }
+  }, [search, tierFilter, collection, collectionLoaded])
 
   function toggleTier(t) {
     setTierFilter(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
   }
 
   const tiers = [
-    { label: 'S', color: '#c9a84c', desc: '5%+' },
-    { label: 'A', color: '#6d3eb0', desc: '2–5%' },
-    { label: 'B', color: '#2e5fa3', desc: '1–2%' },
-    { label: 'C', color: '#3a7a3a', desc: '<1%' },
+    { label: 'S', color: '#c9a84c', desc: 'composite ≥70' },
+    { label: 'A', color: '#6d3eb0', desc: '45–69' },
+    { label: 'B', color: '#2e5fa3', desc: '25–44' },
+    { label: 'C', color: '#3a7a3a', desc: '<25' },
   ]
 
+  // ── Detail page ─────────────────────────────────────────────────────────────
+  if (view === 'detail' && selectedDeck) {
+    const d         = selectedDeck
+    const metaDeck  = d.metaId ? META_BY_ID[d.metaId] : null
+    const coreData  = getCoreCards(d.name)
+    const cards     = metaDeck ? metaDeck.cards : coreData.core
+    const stats     = computeStats(cards, collection)
+    const ownedPct  = stats.totalCards > 0 ? stats.ownedCards / stats.totalCards : 0
+    const missFrac  = stats.totalCards > 0 ? (stats.totalCards - stats.ownedCards) / stats.totalCards : 1
+    const tier      = computeTier(d.share, ownedPct, missFrac, collectionLoaded)
+    const limitlessUrl = `https://limitlesstcg.com/decks?format=standard&name=${encodeURIComponent(d.name)}`
+
+    return (
+      <div>
+        {/* Back button + header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <button onClick={backToList}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', padding: '6px 14px', cursor: 'pointer',
+              color: 'var(--text)', fontSize: '0.82rem' }}>
+            ← Back
+          </button>
+          <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Deck Detail</span>
+        </div>
+
+        {/* Deck title row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>#{d.rank}</span>
+          <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>{d.name}</h2>
+          <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: 3, fontWeight: 700,
+            background: `${tier.color}22`, color: tier.color, border: `1px solid ${tier.color}` }}>
+            {tier.label}
+          </span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>{d.share}% meta share</span>
+          <a href={limitlessUrl} target="_blank" rel="noreferrer"
+            style={{ marginLeft: 'auto', color: 'var(--gold)', textDecoration: 'none', fontSize: '0.82rem' }}>
+            View on Limitless ↗
+          </a>
+        </div>
+
+        {/* Composite score breakdown */}
+        {tier.composite !== null && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)', padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 10 }}>
+              COMPOSITE SCORE
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: tier.color }}>{tier.composite}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                <ScoreBar label={`Win Rate`} value={tier.winScore} weight="40%" color="#4caf50" />
+                <ScoreBar label={`Owned`}    value={tier.ownedScore}   weight="35%" color="var(--gold)" />
+                <ScoreBar label={`Completeness`} value={tier.missingScore} weight="25%" color="#64b5f6" />
+              </div>
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-dim)', marginTop: 8 }}>
+              composite = win_rate×40% + owned×35% + completeness×25%
+            </div>
+          </div>
+        )}
+        {tier.composite === null && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)', padding: '10px 16px', marginBottom: 16,
+            fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+            Tier based on meta share only — connect your collection for composite scoring.
+          </div>
+        )}
+
+        {/* Full deck content */}
+        {metaDeck ? (
+          <FullDeckDetail cards={cards} stats={stats} collection={collection} />
+        ) : (
+          <CoreCardDetail deckName={d.name} coreData={coreData} stats={stats} collection={collection} limitlessUrl={limitlessUrl} />
+        )}
+      </div>
+    )
+  }
+
+  // ── List page ────────────────────────────────────────────────────────────────
   return (
     <div>
       {/* Header */}
@@ -191,47 +444,48 @@ export default function Decks() {
       {/* Deck rows */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {filtered.map(d => (
-          <DeckRow key={d.rank} deck={d} collection={collection}
+          <DeckRow key={d.rank} deck={d} collection={collection} collectionLoaded={collectionLoaded}
             metaDeck={d.metaId ? META_BY_ID[d.metaId] : null}
-            expanded={expanded === d.rank}
-            onToggle={() => toggle(d.rank)} />
+            onOpen={() => openDetail(d)} />
         ))}
       </div>
     </div>
   )
 }
 
-// ── Deck Row ──────────────────────────────────────────────────────────────────
+// ── Score bar sub-component ───────────────────────────────────────────────────
 
-function DeckRow({ deck, collection, metaDeck, expanded, onToggle }) {
-  const tier = getTier(deck.share)
+function ScoreBar({ label, value, weight, color }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem' }}>
+      <span style={{ minWidth: 90, color: 'var(--text-dim)' }}>{label} <span style={{ opacity: 0.55 }}>({weight})</span></span>
+      <div style={{ flex: 1, height: 5, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${value}%`, background: color, borderRadius: 3 }} />
+      </div>
+      <span style={{ minWidth: 30, textAlign: 'right', color: 'var(--text)' }}>{value}%</span>
+    </div>
+  )
+}
 
-  // Calculate collection stats if we have a decklist
-  const stats = useMemo(() => {
-    if (!metaDeck) return null
-    let totalCards = 0, ownedCards = 0, missingCards = [], totalMissingCost = 0
-    for (const c of metaDeck.cards) {
-      totalCards += c.qty
-      const have = Math.min(getOwned(c, collection), c.qty)
-      ownedCards += have
-      const need = c.qty - have
-      if (need > 0) {
-        missingCards.push({ ...c, have, need })
-      }
-    }
-    const pct = totalCards > 0 ? Math.round((ownedCards / totalCards) * 100) : 0
-    return { totalCards, ownedCards, missingCards, pct, totalMissingCost }
-  }, [metaDeck, collection])
+// ── Deck Row (list view) ──────────────────────────────────────────────────────
 
-  const limitlessUrl = `https://limitlesstcg.com/decks?format=standard&name=${encodeURIComponent(deck.name)}`
+function DeckRow({ deck, collection, collectionLoaded, metaDeck, onOpen }) {
+  const cards   = metaDeck ? metaDeck.cards : getCoreCards(deck.name).core
+  const stats   = useMemo(() => computeStats(cards, collection), [cards, collection])
+  const ownedPct = stats.totalCards > 0 ? stats.ownedCards / stats.totalCards : 0
+  const missFrac = stats.totalCards > 0 ? (stats.totalCards - stats.ownedCards) / stats.totalCards : 1
+  const tier    = computeTier(deck.share, ownedPct, missFrac, collectionLoaded)
+  const hasData = stats.totalCards > 0
 
   return (
-    <div style={{ background: 'var(--surface)', border: `1px solid ${expanded ? 'var(--gold-dim)' : 'var(--border)'}`,
-      borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+    <div onClick={onOpen}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)', overflow: 'hidden', cursor: 'pointer',
+        transition: 'border-color 0.15s' }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--gold-dim)'}
+      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
 
-      {/* Header row — always visible */}
-      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 12,
-        padding: '12px 16px', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' }}>
 
         {/* Rank */}
         <div style={{ minWidth: 28, textAlign: 'right', fontSize: '0.78rem',
@@ -249,8 +503,8 @@ function DeckRow({ deck, collection, metaDeck, expanded, onToggle }) {
         {/* Name */}
         <div style={{ flex: 1, fontWeight: 500, fontSize: '0.92rem' }}>{deck.name}</div>
 
-        {/* Owned % if we have data */}
-        {stats && (
+        {/* Owned % bar */}
+        {hasData && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <div style={{ width: 60, height: 4, background: 'var(--surface2)', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{ height: '100%', borderRadius: 2, width: `${stats.pct}%`,
@@ -274,67 +528,41 @@ function DeckRow({ deck, collection, metaDeck, expanded, onToggle }) {
           </div>
         </div>
 
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', flexShrink: 0 }}>
-          {expanded ? '▲' : '▼'}
-        </div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', flexShrink: 0 }}>▶</div>
       </div>
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div style={{ borderTop: '1px solid var(--border)', padding: 16 }}>
-          {metaDeck ? (
-            <DeckDetail metaDeck={metaDeck} stats={stats} collection={collection}
-              limitlessUrl={limitlessUrl} />
-          ) : (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', marginBottom: 12 }}>
-                Full decklist not available locally.
-              </div>
-              <a href={limitlessUrl} target="_blank" rel="noreferrer"
-                style={{ color: 'var(--gold)', fontSize: '0.85rem', textDecoration: 'none' }}>
-                View on Limitless ↗
-              </a>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
 
-// ── Deck Detail ───────────────────────────────────────────────────────────────
+// ── Full deck detail (has metaDeck) ───────────────────────────────────────────
 
-function DeckDetail({ metaDeck, stats, collection, limitlessUrl }) {
+function FullDeckDetail({ cards, stats, collection }) {
   return (
     <div>
-      {/* Summary bar */}
+      {/* Summary */}
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16,
         fontSize: '0.82rem', color: 'var(--text-dim)' }}>
         <span style={{ color: stats.pct === 100 ? '#4caf50' : 'var(--text)' }}>
           ✅ <strong>{stats.ownedCards}/{stats.totalCards}</strong> cards owned ({stats.pct}%)
         </span>
         <span>🃏 <strong>{stats.missingCards.reduce((s, c) => s + c.need, 0)}</strong> missing</span>
-        <a href={limitlessUrl} target="_blank" rel="noreferrer"
-          style={{ marginLeft: 'auto', color: 'var(--gold)', textDecoration: 'none', fontSize: '0.78rem' }}>
-          View on Limitless ↗
-        </a>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Full card list */}
+        {/* Card list */}
         <div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
             FULL DECKLIST ({stats.totalCards} cards)
           </div>
-          <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-            {metaDeck.cards.map((c, i) => {
+          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+            {cards.map((c, i) => {
               const have = Math.min(getOwned(c, collection), c.qty)
-              const ok   = have >= c.qty
+              const ok      = have >= c.qty
               const partial = have > 0 && !ok
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
                   padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
-                  <span style={{ color: ok ? '#4caf50' : partial ? 'var(--gold)' : 'var(--red,#e57373)',
+                  <span style={{ color: ok ? '#4caf50' : partial ? 'var(--gold)' : '#e57373',
                     minWidth: 12, fontSize: '0.7rem' }}>
                     {ok ? '✓' : partial ? '~' : '✗'}
                   </span>
@@ -354,37 +582,149 @@ function DeckDetail({ metaDeck, stats, collection, limitlessUrl }) {
           </div>
         </div>
 
-        {/* Missing cards */}
-        <div>
-          {stats.missingCards.length === 0 ? (
-            <div style={{ textAlign: 'center', paddingTop: 40 }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>✅</div>
-              <div style={{ color: '#4caf50', fontWeight: 600 }}>You own all the cards!</div>
-            </div>
-          ) : (
-            <>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
-                MISSING ({stats.missingCards.reduce((s, c) => s + c.need, 0)} cards)
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: 8, fontStyle: 'italic' }}>
-                Connect Pi with PokéTCG API key for live prices
-              </div>
-              <div style={{ maxHeight: 310, overflowY: 'auto' }}>
-                {stats.missingCards.map((c, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
-                    <span style={{ color: '#e57373', minWidth: 16 }}>{c.need}×</span>
-                    <span style={{ flex: 1 }}>{c.name}</span>
-                    <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
-                      {c.set_code} {c.number}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {/* Missing panel */}
+        <MissingPanel missingCards={stats.missingCards} />
       </div>
+    </div>
+  )
+}
+
+// ── Core card detail (no metaDeck) ────────────────────────────────────────────
+
+function CoreCardDetail({ deckName, coreData, stats, collection, limitlessUrl }) {
+  const hasCoreCards = coreData.core.length > 0
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14,
+        padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+        <span>⚠️ Full decklist not available locally.</span>
+        <a href={limitlessUrl} target="_blank" rel="noreferrer"
+          style={{ color: 'var(--gold)', textDecoration: 'none', marginLeft: 'auto' }}>
+          View on Limitless ↗
+        </a>
+      </div>
+
+      {hasCoreCards ? (
+        <>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 14,
+            fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+            <span>
+              Core cards: <strong>{stats.ownedCards}/{stats.totalCards}</strong> owned ({stats.pct}%)
+            </span>
+            <span>🃏 <strong>{stats.missingCards.reduce((s, c) => s + c.need, 0)}</strong> core cards missing</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            {/* Core cards list */}
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
+                CORE CARDS ({stats.totalCards} cards)
+              </div>
+              <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+                {coreData.core.map((c, i) => {
+                  const have    = Math.min(getOwned(c, collection), c.qty)
+                  const ok      = have >= c.qty
+                  const partial = have > 0 && !ok
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                      <span style={{ color: ok ? '#4caf50' : partial ? 'var(--gold)' : '#e57373',
+                        minWidth: 12, fontSize: '0.7rem' }}>
+                        {ok ? '✓' : partial ? '~' : '✗'}
+                      </span>
+                      <span style={{ color: 'var(--text-dim)', minWidth: 16, textAlign: 'right' }}>{c.qty}×</span>
+                      <span style={{ flex: 1 }}>{c.name}</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
+                        {c.set_code && c.number ? `${c.set_code} ${c.number}` : ''}
+                      </span>
+                      {!ok && (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem', minWidth: 28, textAlign: 'right' }}>
+                          {have}/{c.qty}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Missing panel */}
+            <MissingPanel missingCards={stats.missingCards} />
+          </div>
+
+          {/* Suggested fillers */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)', padding: '12px 16px' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 8 }}>
+              SUGGESTED FILLERS
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {coreData.fillers.map((f, i) => (
+                <span key={i} style={{ padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem',
+                  background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)' }}>
+                  {f}
+                </span>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+              These are commonly paired cards. Check Limitless for a complete optimized list.
+            </div>
+          </div>
+        </>
+      ) : (
+        /* No core cards mapped — just show fillers hint */
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', padding: '16px', textAlign: 'center' }}>
+          <div style={{ color: 'var(--text-dim)', marginBottom: 10 }}>
+            {coreData.fillers.map((f, i) => (
+              <div key={i} style={{ marginBottom: 4, fontSize: '0.82rem' }}>{f}</div>
+            ))}
+          </div>
+          <a href={limitlessUrl} target="_blank" rel="noreferrer"
+            style={{ color: 'var(--gold)', fontSize: '0.85rem', textDecoration: 'none' }}>
+            View on Limitless ↗
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Missing cards panel ───────────────────────────────────────────────────────
+
+function MissingPanel({ missingCards }) {
+  const totalMissing = missingCards.reduce((s, c) => s + c.need, 0)
+  return (
+    <div>
+      {missingCards.length === 0 ? (
+        <div style={{ textAlign: 'center', paddingTop: 40 }}>
+          <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>✅</div>
+          <div style={{ color: '#4caf50', fontWeight: 600 }}>You own all the cards!</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
+            MISSING ({totalMissing} cards)
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: 8, fontStyle: 'italic' }}>
+            Connect Pi with PokéTCG API key for live prices
+          </div>
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {missingCards.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
+                padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                <span style={{ color: '#e57373', minWidth: 16 }}>{c.need}×</span>
+                <span style={{ flex: 1 }}>{c.name}</span>
+                <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
+                  {c.set_code && c.number ? `${c.set_code} ${c.number}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
