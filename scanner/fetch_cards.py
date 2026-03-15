@@ -12,14 +12,22 @@ OUT_FILE = os.path.join(os.path.dirname(__file__), 'card_db.json')
 PAGE_SIZE = 250
 
 def curl_get(url):
-    cmd = ['curl', '-s', '--max-time', '30', '-H', 'Accept: application/json']
+    cmd = ['/usr/bin/curl', '-s', '-w', '\n__STATUS__%{http_code}', '--max-time', '30', '-H', 'Accept: application/json']
     if API_KEY:
         cmd += ['-H', 'X-Api-Key: ' + API_KEY]
     cmd.append(url)
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=35)
-    if r.returncode != 0 or not r.stdout.strip():
-        raise RuntimeError('curl error: ' + r.stderr)
-    return json.loads(r.stdout)
+    print(f'  curl exit={r.returncode} stderr={r.stderr[:200] if r.stderr else ""}')
+    if r.returncode != 0:
+        raise RuntimeError(f'curl exit {r.returncode}: {r.stderr}')
+    # split off status code
+    parts = r.stdout.rsplit('\n__STATUS__', 1)
+    body = parts[0]
+    status = parts[1] if len(parts) > 1 else '?'
+    print(f'  HTTP {status}, body len={len(body)}, preview={body[:120]}')
+    if not body.strip():
+        raise RuntimeError(f'empty response (HTTP {status})')
+    return json.loads(body)
 
 def slim(card):
     """Keep only what the UI needs."""
