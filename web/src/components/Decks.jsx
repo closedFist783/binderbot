@@ -68,6 +68,65 @@ const TOP_60 = [
 // Index meta-decks by id for fast lookup
 const META_BY_ID = Object.fromEntries(META_DECKS.map(d => [d.id, d]))
 
+// ── Tech card recommendations per archetype ───────────────────────────────────
+const TECH_CARDS = {
+  'gardevoir-ex': [
+    { group: 'Attackers', cards: ['Scream Tail (PAR 86)', 'Cornerstone Mask Ogerpon ex (TWM 115)', 'Radiant Greninja (ASR 46)', 'Duskull (PRE 35)'] },
+    { group: 'Disruption', cards: ['Path to the Peak (CRE 148)', 'Eri (TWM 176)', 'Lost Vacuum (LOR 162)'] },
+    { group: 'Utility', cards: ['Pal Pad (SVI 182)', 'Jacq (SVI 175)', 'Extra Arven', 'Extra Iono'] },
+  ],
+  'dragapult-ex': [
+    { group: 'Attackers', cards: ['Bloodmoon Ursaluna ex (TWM 141)', 'Fezandipiti ex (SFA 38)', 'Latias ex (SSP 76)', 'Hawlucha (SVI 118)'] },
+    { group: 'Disruption', cards: ['Jamming Tower (TWM 153)', 'Counter Catcher (PAR 160)'] },
+    { group: 'Recovery', cards: ['Night Stretcher (SFA 61)', "Extra Boss's Orders"] },
+  ],
+  'charizard-ex': [
+    { group: 'Attackers', cards: ['Entei V (BRS 22)', 'Moltres (MEW 146)', 'Radiant Charizard (PGO 11)'] },
+    { group: 'Disruption', cards: ['Lost Vacuum (LOR 162)', 'Iono (PAL 185)', 'Penny (SVI 183)'] },
+    { group: 'Utility', cards: ['Rescue Board (TEF 159)', 'Artazon (PAL 171)', 'Extra Arven'] },
+  ],
+  'gholdengo-ex': [
+    { group: 'Attackers', cards: ['Flutter Mane (PAR 78)', 'Iron Hands ex (PAR 70)', 'Iron Bundle (PAR 56)'] },
+    { group: 'Disruption', cards: ['Path to the Peak (CRE 148)', 'Eri (TWM 176)'] },
+    { group: 'Utility', cards: ['Box of Disaster (LOR 154)', 'Escape Rope (BST 125)', 'Extra Iono'] },
+  ],
+  'mew-vmax-genesect': [
+    { group: 'Attackers', cards: ['Meloetta (FST 124)', 'Genesect V (FST 185)'] },
+    { group: 'Disruption', cards: ['Power Tablet (FST 236)', 'Iono (PAL 185)'] },
+    { group: 'Utility', cards: ["Freedom Shovel (FST 224)", "Extra Elesa's Sparkle", 'Cram-o-matic'] },
+  ],
+  'raging-bolt-ex': [
+    { group: 'Attackers', cards: ['Iron Hands ex (PAR 70)', 'Raichu V (SIT 45)', 'Miraidon ex (SVI 81)'] },
+    { group: 'Disruption', cards: ['Iono (PAL 185)', 'Counter Catcher (PAR 160)', 'Lightning Storm Rotom (MEW 101)'] },
+    { group: 'Utility', cards: ['Energy Search (various)', 'Nest Ball (SVI 181)', 'Extra Terapagos ex'] },
+  ],
+  'miraidon-ex': [
+    { group: 'Attackers', cards: ['Iron Hands ex (PAR 70)', 'Iron Bundle (PAR 56)', 'Raichu V (SIT 45)'] },
+    { group: 'Disruption', cards: ['Iono (PAL 185)', 'Path to the Peak (CRE 148)'] },
+    { group: 'Utility', cards: ['Escape Rope (BST 125)', 'Extra Energy', 'Cram-o-matic'] },
+  ],
+  'marnie-s-grimmsnarl-ex': [
+    { group: 'Attackers', cards: ['Mimikyu (PAL 97)', 'Galarian Moltres V (EVS 93)', 'Darkrai V (ASR 98)'] },
+    { group: 'Disruption', cards: ["Marnie's Pride (MEG 121)", 'Iono (PAL 185)', 'Lost Vacuum'] },
+    { group: 'Utility', cards: ['Dark Patch (ASR 139)', "Extra Boss's Orders", 'Counter Catcher'] },
+  ],
+  'zoroark-gx': [
+    { group: 'Partners', cards: ['Lycanroc GX (GRI 74)', 'Alolan Ninetales GX (LOT 132)', 'Weavile GX (UNM 132)'] },
+    { group: 'Disruption', cards: ['Guzma (BUS 115)', 'N (FCO 105)', 'Judge (FLI 108)'] },
+    { group: 'Utility', cards: ['Tapu Lele GX (GRI 60)', 'Brooklet Hill (GRI 120)', 'Max Potion'] },
+  ],
+  'pikachu-zekrom-gx': [
+    { group: 'Attackers', cards: ['Boltund V (RCL 67)', 'Raichu & Alolan Raichu GX (UNM 54)', 'Tapu Koko Prism Star (TEU 51)'] },
+    { group: 'Disruption', cards: ['Electropower (LOT 172)', 'Reset Stamp (UNM 206)', 'Iono'] },
+    { group: 'Utility', cards: ['Thunder Mountain Prism Star (LOT 191)', 'Energy Switch', 'Bird Keeper'] },
+  ],
+  'buzzwole-lycanroc': [
+    { group: 'Attackers', cards: ['Buzzwole (FOL 77)', 'Nihilego (LOT 106)', 'Carbink (FST 104)'] },
+    { group: 'Disruption', cards: ['Guzma (BUS 115)', 'Judge (FLI 108)', 'Beast Ring (FOL 102)'] },
+    { group: 'Utility', cards: ['Brooklet Hill (GRI 120)', 'Max Elixir (BKP 102)', 'Beast Energy Prism Star'] },
+  ],
+}
+
 // ── Core cards for decks without a full metaId decklist ───────────────────────
 const CORE_CARDS = {
   'Lugia Archeops': {
@@ -261,13 +320,14 @@ function computeStats(cards, collection) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Decks() {
-  const [collection, setCollection]         = useState({})
+  const [collection, setCollection]             = useState({})
   const [collectionLoaded, setCollectionLoaded] = useState(false)
-  const [search, setSearch]                 = useState('')
-  const [tierFilter, setTierFilter]         = useState([])
+  const [search, setSearch]                     = useState('')
+  const [tierFilter, setTierFilter]             = useState([])
   // Detail page state
-  const [view, setView]                     = useState('list')   // 'list' | 'detail'
-  const [selectedDeck, setSelectedDeck]     = useState(null)
+  const [view, setView]                         = useState('list')   // 'list' | 'detail'
+  const [selectedDeck, setSelectedDeck]         = useState(null)
+  const [detailTab, setDetailTab]               = useState('list')   // 'list' | 'missing' | 'recommended'
 
   // Fetch all cards from Pi
   useEffect(() => {
@@ -286,11 +346,13 @@ export default function Decks() {
   function openDetail(deck) {
     setSelectedDeck(deck)
     setView('detail')
+    setDetailTab('list')
   }
 
   function backToList() {
     setView('list')
     setSelectedDeck(null)
+    setDetailTab('list')
   }
 
   const filtered = useMemo(() => {
@@ -329,6 +391,7 @@ export default function Decks() {
     const missFrac  = stats.totalCards > 0 ? (stats.totalCards - stats.ownedCards) / stats.totalCards : 1
     const tier      = computeTier(d.share, ownedPct, missFrac, collectionLoaded)
     const limitlessUrl = `https://limitlesstcg.com/decks?format=standard&name=${encodeURIComponent(d.name)}`
+    const totalMissing = stats.missingCards.reduce((s, c) => s + c.need, 0)
 
     return (
       <div>
@@ -386,11 +449,206 @@ export default function Decks() {
           </div>
         )}
 
-        {/* Full deck content */}
-        {metaDeck ? (
-          <FullDeckDetail cards={cards} stats={stats} collection={collection} />
-        ) : (
-          <CoreCardDetail deckName={d.name} coreData={coreData} stats={stats} collection={collection} limitlessUrl={limitlessUrl} />
+        {/* ── Summary bar — always visible above tabs ── */}
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 12,
+          fontSize: '0.82rem', color: 'var(--text-dim)',
+          padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ color: stats.pct === 100 ? '#4caf50' : 'var(--text)' }}>
+            <strong>{stats.ownedCards}/{stats.totalCards}</strong> cards owned ({stats.pct}%)
+          </span>
+          <span>🃏 <strong>{totalMissing}</strong> missing</span>
+          {!metaDeck && stats.totalCards > 0 && (
+            <span style={{ fontSize: '0.72rem', opacity: 0.7 }}>(core cards only)</span>
+          )}
+        </div>
+
+        {/* ── Tab bar ── */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {[
+            { key: 'list',        label: 'Decklist' },
+            { key: 'missing',     label: 'Missing' },
+            { key: 'recommended', label: 'Recommended' },
+          ].map(({ key, label }) => {
+            const active = detailTab === key
+            return (
+              <button key={key} onClick={() => setDetailTab(key)}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: 'var(--radius)',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: active ? 600 : 400,
+                  border: active ? 'none' : '1px solid var(--border)',
+                  background: active ? 'var(--gold)' : 'var(--surface)',
+                  color: active ? '#0b0b10' : 'var(--text-dim)',
+                }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Decklist tab ── */}
+        {detailTab === 'list' && (
+          <div>
+            {!metaDeck && (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14,
+                padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+                <span>⚠️ Full decklist not available locally — showing core cards only.</span>
+                <a href={limitlessUrl} target="_blank" rel="noreferrer"
+                  style={{ color: 'var(--gold)', textDecoration: 'none', marginLeft: 'auto' }}>
+                  View on Limitless ↗
+                </a>
+              </div>
+            )}
+            {cards.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+                No card data available.{' '}
+                <a href={limitlessUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--gold)' }}>
+                  View on Limitless ↗
+                </a>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
+                  {metaDeck ? `FULL DECKLIST (${stats.totalCards} cards)` : `CORE CARDS (${stats.totalCards} cards)`}
+                </div>
+                <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                  {cards.map((c, i) => {
+                    const have    = Math.min(getOwned(c, collection), c.qty)
+                    const ok      = have >= c.qty
+                    const partial = have > 0 && !ok
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                        <span style={{ color: ok ? '#4caf50' : partial ? 'var(--gold)' : '#e57373',
+                          minWidth: 12, fontSize: '0.7rem' }}>
+                          {ok ? '✓' : partial ? '~' : '✗'}
+                        </span>
+                        <span style={{ color: 'var(--text-dim)', minWidth: 16, textAlign: 'right' }}>{c.qty}×</span>
+                        <span style={{ flex: 1 }}>{c.name}</span>
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
+                          {c.set_code && c.number ? `${c.set_code} ${c.number}` : ''}
+                        </span>
+                        {!ok && (
+                          <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem', minWidth: 28, textAlign: 'right' }}>
+                            {have}/{c.qty}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Missing tab ── */}
+        {detailTab === 'missing' && (
+          <div>
+            {stats.missingCards.length === 0 ? (
+              <div style={{ textAlign: 'center', paddingTop: 40 }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>✅</div>
+                <div style={{ color: '#4caf50', fontWeight: 600 }}>You own all the cards!</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
+                  MISSING ({totalMissing} cards)
+                </div>
+                <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                  {stats.missingCards.map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                      <span style={{ color: '#e57373', minWidth: 52 }}>need×{c.need}</span>
+                      <span style={{ flex: 1 }}>{c.name}</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
+                        {c.set_code && c.number ? `${c.set_code} ${c.number}` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Recommended tab ── */}
+        {detailTab === 'recommended' && (
+          <div>
+            {/* Deck complete note */}
+            {stats.pct === 100 && (
+              <div style={{ fontSize: '0.78rem', color: '#4caf50', marginBottom: 14,
+                padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)' }}>
+                ✅ Deck complete — here are popular tech swaps
+              </div>
+            )}
+
+            {metaDeck ? (
+              /* Has full decklist */
+              TECH_CARDS[d.metaId] ? (
+                <div>
+                  {TECH_CARDS[d.metaId].map((group, gi) => (
+                    <div key={gi} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 6 }}>
+                        {group.group.toUpperCase()}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {group.cards.map((card, ci) => (
+                          <span key={ci} style={{
+                            padding: '3px 10px',
+                            borderRadius: 20,
+                            background: 'var(--surface2)',
+                            border: '1px solid var(--border)',
+                            fontSize: '0.75rem',
+                            color: 'var(--text)',
+                          }}>
+                            {card}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', padding: '12px 0' }}>
+                  Check{' '}
+                  <a href={limitlessUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--gold)' }}>
+                    Limitless
+                  </a>{' '}
+                  for popular tech choices in this archetype.
+                </div>
+              )
+            ) : (
+              /* Core cards only (null metaId) */
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 8 }}>
+                  COMMONLY PAIRED CARDS
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {coreData.fillers.map((f, i) => (
+                    <span key={i} style={{
+                      padding: '3px 10px',
+                      borderRadius: 20,
+                      background: 'var(--surface2)',
+                      border: '1px solid var(--border)',
+                      fontSize: '0.75rem',
+                      color: 'var(--text)',
+                    }}>
+                      {f}
+                    </span>
+                  ))}
+                </div>
+                <a href={limitlessUrl} target="_blank" rel="noreferrer"
+                  style={{ color: 'var(--gold)', fontSize: '0.82rem', textDecoration: 'none' }}>
+                  View full list on Limitless ↗
+                </a>
+              </div>
+            )}
+          </div>
         )}
       </div>
     )
@@ -530,201 +788,6 @@ function DeckRow({ deck, collection, collectionLoaded, metaDeck, onOpen }) {
 
         <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', flexShrink: 0 }}>▶</div>
       </div>
-    </div>
-  )
-}
-
-// ── Full deck detail (has metaDeck) ───────────────────────────────────────────
-
-function FullDeckDetail({ cards, stats, collection }) {
-  return (
-    <div>
-      {/* Summary */}
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16,
-        fontSize: '0.82rem', color: 'var(--text-dim)' }}>
-        <span style={{ color: stats.pct === 100 ? '#4caf50' : 'var(--text)' }}>
-          ✅ <strong>{stats.ownedCards}/{stats.totalCards}</strong> cards owned ({stats.pct}%)
-        </span>
-        <span>🃏 <strong>{stats.missingCards.reduce((s, c) => s + c.need, 0)}</strong> missing</span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Card list */}
-        <div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
-            FULL DECKLIST ({stats.totalCards} cards)
-          </div>
-          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
-            {cards.map((c, i) => {
-              const have = Math.min(getOwned(c, collection), c.qty)
-              const ok      = have >= c.qty
-              const partial = have > 0 && !ok
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
-                  <span style={{ color: ok ? '#4caf50' : partial ? 'var(--gold)' : '#e57373',
-                    minWidth: 12, fontSize: '0.7rem' }}>
-                    {ok ? '✓' : partial ? '~' : '✗'}
-                  </span>
-                  <span style={{ color: 'var(--text-dim)', minWidth: 16, textAlign: 'right' }}>{c.qty}×</span>
-                  <span style={{ flex: 1 }}>{c.name}</span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
-                    {c.set_code} {c.number}
-                  </span>
-                  {!ok && (
-                    <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem', minWidth: 28, textAlign: 'right' }}>
-                      {have}/{c.qty}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Missing panel */}
-        <MissingPanel missingCards={stats.missingCards} />
-      </div>
-    </div>
-  )
-}
-
-// ── Core card detail (no metaDeck) ────────────────────────────────────────────
-
-function CoreCardDetail({ deckName, coreData, stats, collection, limitlessUrl }) {
-  const hasCoreCards = coreData.core.length > 0
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14,
-        padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-        <span>⚠️ Full decklist not available locally.</span>
-        <a href={limitlessUrl} target="_blank" rel="noreferrer"
-          style={{ color: 'var(--gold)', textDecoration: 'none', marginLeft: 'auto' }}>
-          View on Limitless ↗
-        </a>
-      </div>
-
-      {hasCoreCards ? (
-        <>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 14,
-            fontSize: '0.82rem', color: 'var(--text-dim)' }}>
-            <span>
-              Core cards: <strong>{stats.ownedCards}/{stats.totalCards}</strong> owned ({stats.pct}%)
-            </span>
-            <span>🃏 <strong>{stats.missingCards.reduce((s, c) => s + c.need, 0)}</strong> core cards missing</span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-            {/* Core cards list */}
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
-                CORE CARDS ({stats.totalCards} cards)
-              </div>
-              <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-                {coreData.core.map((c, i) => {
-                  const have    = Math.min(getOwned(c, collection), c.qty)
-                  const ok      = have >= c.qty
-                  const partial = have > 0 && !ok
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
-                      <span style={{ color: ok ? '#4caf50' : partial ? 'var(--gold)' : '#e57373',
-                        minWidth: 12, fontSize: '0.7rem' }}>
-                        {ok ? '✓' : partial ? '~' : '✗'}
-                      </span>
-                      <span style={{ color: 'var(--text-dim)', minWidth: 16, textAlign: 'right' }}>{c.qty}×</span>
-                      <span style={{ flex: 1 }}>{c.name}</span>
-                      <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
-                        {c.set_code && c.number ? `${c.set_code} ${c.number}` : ''}
-                      </span>
-                      {!ok && (
-                        <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem', minWidth: 28, textAlign: 'right' }}>
-                          {have}/{c.qty}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Missing panel */}
-            <MissingPanel missingCards={stats.missingCards} />
-          </div>
-
-          {/* Suggested fillers */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)', padding: '12px 16px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: 8 }}>
-              SUGGESTED FILLERS
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {coreData.fillers.map((f, i) => (
-                <span key={i} style={{ padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem',
-                  background: 'var(--surface2)', color: 'var(--text)', border: '1px solid var(--border)' }}>
-                  {f}
-                </span>
-              ))}
-            </div>
-            <div style={{ marginTop: 10, fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-              These are commonly paired cards. Check Limitless for a complete optimized list.
-            </div>
-          </div>
-        </>
-      ) : (
-        /* No core cards mapped — just show fillers hint */
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)', padding: '16px', textAlign: 'center' }}>
-          <div style={{ color: 'var(--text-dim)', marginBottom: 10 }}>
-            {coreData.fillers.map((f, i) => (
-              <div key={i} style={{ marginBottom: 4, fontSize: '0.82rem' }}>{f}</div>
-            ))}
-          </div>
-          <a href={limitlessUrl} target="_blank" rel="noreferrer"
-            style={{ color: 'var(--gold)', fontSize: '0.85rem', textDecoration: 'none' }}>
-            View on Limitless ↗
-          </a>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Missing cards panel ───────────────────────────────────────────────────────
-
-function MissingPanel({ missingCards }) {
-  const totalMissing = missingCards.reduce((s, c) => s + c.need, 0)
-  return (
-    <div>
-      {missingCards.length === 0 ? (
-        <div style={{ textAlign: 'center', paddingTop: 40 }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>✅</div>
-          <div style={{ color: '#4caf50', fontWeight: 600 }}>You own all the cards!</div>
-        </div>
-      ) : (
-        <>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8, fontWeight: 600 }}>
-            MISSING ({totalMissing} cards)
-          </div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginBottom: 8, fontStyle: 'italic' }}>
-            Connect Pi with PokéTCG API key for live prices
-          </div>
-          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-            {missingCards.map((c, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6,
-                padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
-                <span style={{ color: '#e57373', minWidth: 16 }}>{c.need}×</span>
-                <span style={{ flex: 1 }}>{c.name}</span>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.68rem' }}>
-                  {c.set_code && c.number ? `${c.set_code} ${c.number}` : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 }
