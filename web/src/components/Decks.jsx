@@ -95,7 +95,7 @@ export default function Decks() {
       if (format !== 'both' && deck.format !== format) return false
       if (!tiers.includes(deck.tier)) return false
       if (archetypes.length > 0 && !archetypes.includes(deck.archetype)) return false
-      if (energyFilter.length > 0 && !energyFilter.some(e => deck.energy_types.includes(e))) return false
+      if (energyFilter.length > 0 && !energyFilter.some(e => deck.energy.includes(e))) return false
       if (cost > maxCost) return false
       if (ownedPct * 100 < minOwned) return false
       return true
@@ -340,7 +340,7 @@ function DeckRow({ deck, total, owned, missing, cost, score, ownedPct, collectio
             </span>
             <span style={{ fontSize:'0.72rem', color:'var(--text-dim)' }}>{deck.archetype}</span>
             <span style={{ fontSize:'0.82rem' }}>
-              {deck.energy_types.map(e => ENERGY_ICONS[e] ?? e).join(' ')}
+              {deck.energy.map(e => ENERGY_ICONS[e] ?? e).join(' ')}
             </span>
           </div>
 
